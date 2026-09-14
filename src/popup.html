@@ -109,6 +109,26 @@
 			</label>
 		</div>
 
+		<!-- Shared holiday dates. Rules opt in with "Pause on holidays". -->
+		<div class="holiday-bar">
+			<div class="holiday-controls">
+				<label class="holiday-today">
+					<input type="checkbox" id="holidayTodayToggle" />
+					<span
+						>Today is a holiday <small id="holidayTodayDate"></small
+					></span>
+				</label>
+				<div class="holiday-add">
+					<input type="date" id="holidayDateInput" />
+					<button class="textButton" id="holidayAddButton">
+						Mark date
+					</button>
+				</div>
+			</div>
+			<div class="error-message" id="holidayError"></div>
+			<div class="holiday-chips" id="holidayChips"></div>
+		</div>
+
 		<div class="domain-email-list" id="domainEmailList">
 			<!-- Dynamic content will be inserted here -->
 		</div>
@@ -136,6 +156,7 @@
 				hidden
 			/>
 		</div>
+		<script src="rules.js"></script>
 		<script src="popup.js"></script>
 	</body>
 </html>

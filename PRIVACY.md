@@ -24,9 +24,10 @@ The extension stores only what you type into its popup:
 | Enabled / disabled | Whether a rule, or the whole extension, is active |
 | Days of the week   | Which days a rule applies on                      |
 | Active hours       | Optional start and end time for a rule            |
+| Holiday dates      | Dates you mark off, on which opted-in rules pause |
 
-These are held under two keys, `domainEmails` and `isEnabled`, in Chrome's
-extension storage (`chrome.storage.sync`).
+These are held under three keys, `domainEmails`, `isEnabled`, and `holidays`,
+in Chrome's extension storage (`chrome.storage.sync`).
 
 Email addresses are personal data, which is why this policy exists. They are
 used for one purpose only: to build the account parameter added to a URL when

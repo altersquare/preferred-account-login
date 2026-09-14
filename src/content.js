@@ -1,77 +1,10 @@
-const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
-
-function normalizeDays(days) {
-	if (!Array.isArray(days) || days.length === 0) {
-		return [...ALL_DAYS];
-	}
-
-	const normalizedDays = [...new Set(days)]
-		.map((day) => Number(day))
-		.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
-		.sort((a, b) => a - b);
-
-	return normalizedDays.length ? normalizedDays : [...ALL_DAYS];
-}
-
-function normalizeDomainSetting(value) {
-	if (typeof value === "string") {
-		return {
-			email: value,
-			enabled: true,
-			days: [...ALL_DAYS],
-			timeEnabled: false,
-			startTime: "",
-			endTime: "",
-		};
-	}
-
-	return {
-		email: value?.email || "",
-		enabled: value?.enabled !== false,
-		days: normalizeDays(value?.days),
-		timeEnabled: Boolean(value?.timeEnabled),
-		startTime: value?.startTime || "",
-		endTime: value?.endTime || "",
-	};
-}
-
-function parseTimeToMinutes(timeValue) {
-	if (!/^\d{2}:\d{2}$/.test(timeValue)) {
-		return null;
-	}
-
-	const [hours, minutes] = timeValue.split(":").map(Number);
-	if (
-		!Number.isInteger(hours) ||
-		!Number.isInteger(minutes) ||
-		hours < 0 ||
-		hours > 23 ||
-		minutes < 0 ||
-		minutes > 59
-	) {
-		return null;
-	}
-
-	return hours * 60 + minutes;
-}
-
-function isWithinActiveHours(startTime, endTime, currentMinutes) {
-	const startMinutes = parseTimeToMinutes(startTime);
-	const endMinutes = parseTimeToMinutes(endTime);
-
-	if (startMinutes === null || endMinutes === null) {
-		return false;
-	}
-
-	return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
-}
-
 // Immediately invoked function expression (IIFE) to execute code on page load.
 (async () => {
 	try {
 		// Retrieve stored settings from Chrome storage.
 		const { isEnabled } = await getFromStorage("isEnabled"); // Get whether the extension is enabled.
 		let { domainEmails } = await getFromStorage("domainEmails"); // Get the domain-email pairs.
+		const { holidays } = await getFromStorage("holidays"); // Get the dates marked as holidays.
 
 		// If on a Chrome internal page (e.g., extensions page), exit.
 		if (window.location.protocol === "chrome:") return;
@@ -110,34 +43,20 @@ function isWithinActiveHours(startTime, endTime, currentMinutes) {
 			return;
 		}
 
-		const domainSetting = domainEmails[matchedDomain];
-		const { email, enabled, days, timeEnabled, startTime, endTime } =
-			normalizeDomainSetting(domainSetting);
+		const rule = normalizeDomainSetting(domainEmails[matchedDomain]);
+		const context = buildRuleContext({ holidays });
 
-		if (!enabled) {
-			console.log("Extension is disabled for this domain.");
+		// Every "should this rule run right now" question is answered by the
+		// shared engine in rules.js, so the popup and the content script can
+		// never disagree about it.
+		const verdict = evaluateRule(rule, context);
+		if (!verdict.active) {
+			console.log(`Rule skipped: ${verdict.reason}.`);
 			return;
-		}
-
-		// Check if the rule applies to the current day
-		const currentDay = new Date().getDay(); // 0 (Sunday) to 6 (Saturday)
-		if (!days.includes(currentDay)) {
-			console.log("Rule is not active for today.");
-			return;
-		}
-
-		if (timeEnabled) {
-			const now = new Date();
-			const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-			if (!isWithinActiveHours(startTime, endTime, currentMinutes)) {
-				console.log("Rule is not active at this time.");
-				return;
-			}
 		}
 
 		// Add the authuser parameter to the URL.
-		await setAuthUser(email);
+		await setAuthUser(rule.email);
 	} catch (error) {
 		console.error("Error:", error); // Log any errors.
 	}

@@ -11,6 +11,7 @@ If you use multiple Google accounts (personal, work, school), you know the frust
 - **Domain-Specific Account Selection**: Set different preferred accounts for different Google domains (e.g., YouTube, Gmail, Drive)
 - **Day-Based Rules**: Choose which days each domain rule should apply
 - **Optional Active Hours**: Add a start and end time so a rule only runs during a specific window on the selected days
+- **Holidays**: Mark a date as a holiday and every rule set to "Pause on holidays" stands down for that day, leaving the rest running
 - **Auto-Redirect**: Automatically redirects to add the `authuser` parameter when you visit a configured Google domain
 - **Smart Loop Prevention**: Intelligently prevents redirect loops
 - **Any Google Domain**: Enter any domain under `google.com`, `youtube.com`, or `ai.google` — new Google services work without an extension update
@@ -42,8 +43,22 @@ If you use multiple Google accounts (personal, work, school), you know the frust
     - Enter the Gmail address you prefer to use for that domain
     - Choose the days when the rule should be active
     - Optionally enable `Active hours` and set a start and end time
+    - Optionally tick `Pause on holidays` if the rule should stand down on the dates marked as holidays
 4. Click "Save Changes" to apply your settings
 5. Visit any Google service - the extension will automatically redirect you to use your preferred account
+
+### Taking a day off
+
+- Tick "Today is a holiday" in the popup header to mark the current date. Once
+  saved, rules with `Pause on holidays` stop applying; every other rule carries
+  on as usual.
+- Use the date field next to it to mark a day in advance — a public holiday or
+  a day of leave — and the chips below list every date currently marked.
+- Marking or clearing a date is a pending change like any other: it shows in
+  the header and enables "Save Changes", which writes it and reloads the active
+  tab so the change takes hold. Closing the popup without saving discards it.
+- Dates that have passed are dropped automatically the next time the popup
+  opens.
 
 ### Backing up and moving rules
 
@@ -55,6 +70,13 @@ If you use multiple Google accounts (personal, work, school), you know the frust
   click "Save Changes" — closing the popup discards the import.
 - Rows that name an unsupported domain or an invalid email address are skipped,
   and the popup reports how many were loaded and how many were skipped.
+- Exported files carry the holiday dates and each rule's `Pause on holidays`
+  setting alongside the rules themselves, so a restore brings back a working
+  set rather than rules whose holiday setting has nothing to point at.
+- Imported holiday dates are staged exactly like the rules: they appear in the
+  header, replacing what was there, and reach storage only when you click
+  "Save Changes". A file written before this feature carries no dates and
+  leaves the ones you have marked alone.
 
 ## Rule Behavior
 
@@ -65,6 +87,11 @@ If you use multiple Google accounts (personal, work, school), you know the frust
 - End time must be later than start time. Overnight windows are not supported.
 - At least one day must be selected. If all day buttons are deselected, the popup shows an error and the rule cannot be saved.
 - Turning `Active hours` off clears the saved start and end times for that rule.
+- If `Pause on holidays` is turned on, the rule does not run on a date marked as
+  a holiday, whatever its days and hours say. Rules that leave it off are
+  unaffected by holidays.
+- Holiday dates are compared in your own time zone, not UTC, so a date marked as
+  a holiday covers your local day.
 
 ## Domain Configuration Examples
 
@@ -96,7 +123,7 @@ The extension:
 
 1. Checks if the current website is a Google domain
 2. Determines if you've configured a preferred account for that domain
-3. Checks whether the rule is active for the current day and, if configured, the current local time
+3. Checks whether the rule is active right now: enabled, on a selected day, inside its active hours if configured, and not held back by a holiday
 4. Adds the appropriate `authuser` parameter to the URL
 5. Implements safeguards to prevent redirect loops
 6. Provides an intuitive UI for managing your preferences
@@ -106,6 +133,9 @@ The extension:
 - Built with vanilla JavaScript, HTML, and CSS
 - Uses Chrome's Storage API for persistent settings
 - Content script runs at document start to ensure timely redirects
+- `src/rules.js` holds the rule schema and the ordered activation checks that
+  decide whether a rule applies; the popup and the content script both load it,
+  so a new condition is added in one place
 - Modern ES6+ JavaScript features for clean, maintainable code
 - Responsive UI design that works across different screen sizes
 - Code formatting with Prettier and linting with ESLint
@@ -146,7 +176,8 @@ Contributions are welcome! To contribute:
 │   ├── content.js     # Content script for adding authuser parameter
 │   ├── popup.css      # Extension popup styles
 │   ├── popup.html     # Extension popup interface
-│   └── popup.js       # Popup functionality
+│   ├── popup.js       # Popup functionality
+│   └── rules.js       # Shared rule schema and activation checks
 ├── .gitattributes     # Git attributes (keeps LF endings on shell scripts)
 ├── .gitignore         # Git ignore file
 ├── .prettierrc.js     # Prettier configuration

@@ -16,6 +16,7 @@ Output: store-assets/*.png  (intermediate HTML lands in store-assets/_src/)
 """
 
 import base64
+import datetime
 import io
 import json
 import os
@@ -54,6 +55,12 @@ POPUP_W = 600
 ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
 WEEKDAYS = [1, 2, 3, 4, 5]
 
+# Marked as a holiday in the "holidays" screenshot. rules.js compares dates in
+# the viewer's own local time, so "today" (whenever the build actually runs)
+# is the one value guaranteed to render as marked rather than a stale date
+# that has already dropped off the list.
+TODAY_KEY = datetime.date.today().isoformat()
+
 
 def find_chrome():
     for candidate in CHROME_CANDIDATES:
@@ -79,12 +86,17 @@ def rule(email, days=None, enabled=True, **extra):
                  "days": list(ALL_DAYS if days is None else days)}, **extra)
 
 
-def write_popup(slug, domain_emails, probe=False):
+def write_popup(slug, domain_emails, holidays=None, probe=False):
     """Write a standalone, runnable copy of the real popup with sample rules."""
     css = read("src", "popup.css")
+    # rules.js declares the schema and checks (normalizeDomainSetting,
+    # toDateKey, evaluateRule, ...) that popup.js relies on as globals, the
+    # same way src/popup.html loads it ahead of popup.js.
+    rules_js = read("src", "rules.js")
     js = read("src", "popup.js")
     html = read("src", "popup.html")
     body = html.split("<body>", 1)[1].split("</body>", 1)[0]
+    body = body.replace('<script src="rules.js"></script>', "")
     body = body.replace('<script src="popup.js"></script>', "")
 
     stub = (
@@ -92,7 +104,11 @@ def write_popup(slug, domain_emails, probe=False):
         "async get(ks){const o={};for(const k of ks)if(k in this._d)o[k]=this._d[k];"
         "return o;},async set(o){Object.assign(this._d,o);}}},"
         "tabs:{async reload(){}}};</script>"
-        % json.dumps({"domainEmails": domain_emails, "isEnabled": True})
+        % json.dumps({
+            "domainEmails": domain_emails,
+            "isEnabled": True,
+            "holidays": list(holidays or []),
+        })
     )
 
     # The popup normally caps itself at 600px and scrolls. For a still image we
@@ -108,8 +124,9 @@ def write_popup(slug, domain_emails, probe=False):
 
     out = (
         '<!doctype html><html><head><meta charset="utf-8"><title>%s</title>'
-        "<style>%s</style>%s</head><body>%s\n%s\n<script>%s</script></body></html>"
-        % (NAME, css, overrides, body, stub, js)
+        "<style>%s</style>%s</head><body>%s\n%s\n"
+        "<script>%s</script><script>%s</script></body></html>"
+        % (NAME, css, overrides, body, stub, rules_js, js)
     )
     filename = "popup-%s%s.html" % (slug, "-probe" if probe else "")
     io.open(os.path.join(SRC, filename), "w",
@@ -129,9 +146,9 @@ def chrome_shot(chrome, src_file, out_png, width, height):
     )
 
 
-def measure_popup(chrome, slug, domain_emails):
+def measure_popup(chrome, slug, domain_emails, holidays=None):
     """Render the popup over a magenta page and read back its natural height."""
-    probe_file = write_popup(slug, domain_emails, probe=True)
+    probe_file = write_popup(slug, domain_emails, holidays=holidays, probe=True)
     raw = os.path.join(SRC, "_probe-%s.png" % slug)
     chrome_shot(chrome, probe_file, raw, POPUP_W, 2400)
 
@@ -222,13 +239,16 @@ def render(chrome, html, out_png, width, height):
           % (out_png, width, height, os.path.getsize(dest) / 1024.0))
 
 
+# Each entry is (slug, headline, sub, domain_emails, holidays). holidays
+# defaults to none for shots that do not need it.
 SHOTS = [
     ("01-overview",
      "One preferred account per service",
      "Tell each site which of your signed-in accounts to open with, then stop switching.",
      {"mail.google.com": rule("you@gmail.com"),
       "drive.google.com": rule("you@company.com"),
-      "youtube.com": rule("you@gmail.com")}),
+      "youtube.com": rule("you@gmail.com")},
+     None),
 
     ("02-work-personal",
      "Work on one, personal on another",
@@ -236,7 +256,8 @@ SHOTS = [
      {"mail.google.com": rule("you@gmail.com"),
       "drive.google.com": rule("you@company.com"),
       "docs.google.com": rule("you@company.com"),
-      "youtube.com": rule("you@gmail.com")}),
+      "youtube.com": rule("you@gmail.com")},
+     None),
 
     ("03-schedule",
      "Rules that follow your week",
@@ -244,14 +265,17 @@ SHOTS = [
      "9 to 6, weekdays only.",
      {"drive.google.com": rule("you@company.com", WEEKDAYS, timeEnabled=True,
                                startTime="09:00", endTime="18:00"),
-      "mail.google.com": rule("you@gmail.com")}),
+      "mail.google.com": rule("you@gmail.com")},
+     None),
 
-    ("04-toggles",
-     "Switch a rule off without deleting it",
-     "Pause a single rule, or turn the whole extension off from the header toggle.",
-     {"mail.google.com": rule("you@gmail.com"),
-      "drive.google.com": rule("you@company.com", enabled=False),
-      "youtube.com": rule("you@gmail.com", enabled=False)}),
+    ("04-holidays",
+     "Stand down on your day off",
+     "Mark a date once, and every rule set to Pause on holidays stops applying "
+     "for the day. The rest keep running.",
+     {"mail.google.com": rule("you@gmail.com", skipOnHolidays=True),
+      "drive.google.com": rule("you@company.com", skipOnHolidays=True),
+      "youtube.com": rule("you@gmail.com")},
+     [TODAY_KEY]),
 
     ("05-export-import",
      "Back up your rules, or move them",
@@ -260,7 +284,8 @@ SHOTS = [
      {"mail.google.com": rule("you@gmail.com"),
       "gemini.google.com": rule("you@company.com"),
       "meet.google.com": rule("you@company.com"),
-      "photos.google.com": rule("you@gmail.com")}),
+      "photos.google.com": rule("you@gmail.com")},
+     None),
 ]
 
 
@@ -270,9 +295,9 @@ def main():
     print("Chrome: %s" % chrome)
     print("Writing listing assets to %s" % ASSETS)
 
-    for slug, headline, sub, rules in SHOTS:
-        popup_h = measure_popup(chrome, slug, rules)
-        popup_file = write_popup(slug, rules)
+    for slug, headline, sub, rules, holidays in SHOTS:
+        popup_h = measure_popup(chrome, slug, rules, holidays)
+        popup_file = write_popup(slug, rules, holidays=holidays)
         render(chrome, screenshot_page(headline, sub, popup_file, popup_h),
                "screenshot-%s.png" % slug, 1280, 800)
 

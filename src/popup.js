@@ -73,77 +73,153 @@ function resolveDomainInput(input) {
 	return isValidGoogleHostname(hostname) ? hostname : null;
 }
 
-const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
-
-function normalizeDays(days) {
-	if (!Array.isArray(days) || days.length === 0) {
-		return [...ALL_DAYS];
-	}
-
-	const normalizedDays = [...new Set(days)]
-		.map((day) => Number(day))
-		.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
-		.sort((a, b) => a - b);
-
-	return normalizedDays.length ? normalizedDays : [...ALL_DAYS];
-}
-
-function normalizeDomainSetting(value) {
-	if (typeof value === "string") {
-		return {
-			email: value,
-			enabled: true,
-			days: [...ALL_DAYS],
-			timeEnabled: false,
-			startTime: "",
-			endTime: "",
-		};
-	}
-
-	return {
-		email: value?.email || "",
-		enabled: value?.enabled !== false,
-		days: normalizeDays(value?.days),
-		timeEnabled: Boolean(value?.timeEnabled),
-		startTime: value?.startTime || "",
-		endTime: value?.endTime || "",
-	};
-}
-
-function parseTimeToMinutes(timeValue) {
-	if (!/^\d{2}:\d{2}$/.test(timeValue)) {
-		return null;
-	}
-
-	const [hours, minutes] = timeValue.split(":").map(Number);
-	if (
-		!Number.isInteger(hours) ||
-		!Number.isInteger(minutes) ||
-		hours < 0 ||
-		hours > 23 ||
-		minutes < 0 ||
-		minutes > 59
-	) {
-		return null;
-	}
-
-	return hours * 60 + minutes;
-}
-
-function isValidTimeRange(startTime, endTime) {
-	const startMinutes = parseTimeToMinutes(startTime);
-	const endMinutes = parseTimeToMinutes(endTime);
-
-	if (startMinutes === null || endMinutes === null) {
-		return false;
-	}
-
-	return endMinutes > startMinutes;
-}
-
 function setErrorMessage(element, message = "") {
 	element.textContent = message;
 	element.style.display = message ? "block" : "none";
+}
+
+/* -------------------------------------------------------------------------
+ * Holidays
+ *
+ * One shared list of dates, stored under "holidays" next to the rules. Rules
+ * opt in individually with "Pause on holidays", so marking a date off silences
+ * those rules and leaves every other rule running.
+ *
+ * Dates behave like every other edit in this popup: marking or clearing one
+ * shows on screen and enables Save Changes, and only Save Changes writes it.
+ * Closing the popup discards it.
+ * ---------------------------------------------------------------------- */
+
+let holidayDates = [];
+
+// Set while the dates on screen differ from the ones in storage, whether they
+// were marked by hand or loaded from an imported file. Save Changes writes
+// them and clears this; closing the popup drops them.
+let holidaysPendingSave = false;
+
+function getTodayKey() {
+	return toDateKey(new Date());
+}
+
+function formatDateKey(dateKey) {
+	const [year, month, day] = dateKey.split("-").map(Number);
+	return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+		weekday: "short",
+		day: "numeric",
+		month: "short",
+	});
+}
+
+// Reloading the active tab is only a convenience, so a failure here is not
+// worth surfacing. tabs.reload() with no arguments reloads the selected tab of
+// the current window and, unlike scripting.executeScript() or reading a tab's
+// url, needs no permission of its own — which keeps the manifest down to
+// "storage".
+async function reloadActiveTab() {
+	try {
+		await chrome.tabs.reload();
+	} catch (error) {
+		console.warn("Could not reload active tab:", error);
+	}
+}
+
+async function persistHolidays() {
+	holidayDates = normalizeHolidays(holidayDates);
+	await setStorage("holidays", holidayDates);
+	holidaysPendingSave = false;
+}
+
+// Puts an edit on screen and hands it to Save Changes, which is what writes it
+// and reloads the tab so the change takes hold.
+function stageHolidayEdit() {
+	holidaysPendingSave = true;
+	renderHolidays();
+	enableSaveButton();
+}
+
+function renderHolidays() {
+	const todayKey = getTodayKey();
+	const todayToggle = document.getElementById("holidayTodayToggle");
+	const chips = document.getElementById("holidayChips");
+
+	todayToggle.checked = holidayDates.includes(todayKey);
+	document.getElementById("holidayTodayDate").textContent =
+		formatDateKey(todayKey);
+
+	chips.innerHTML = "";
+	for (const date of holidayDates) {
+		const chip = document.createElement("span");
+		chip.className = `holiday-chip${date === todayKey ? " today" : ""}`;
+
+		const label = document.createElement("span");
+		label.textContent = formatDateKey(date);
+		chip.appendChild(label);
+
+		const removeButton = document.createElement("button");
+		removeButton.type = "button";
+		removeButton.className = "holiday-chip-remove";
+		removeButton.textContent = "×";
+		removeButton.title = `Remove ${date}`;
+		removeButton.addEventListener("click", () => {
+			holidayDates = holidayDates.filter((value) => value !== date);
+			stageHolidayEdit();
+		});
+		chip.appendChild(removeButton);
+
+		chips.appendChild(chip);
+	}
+}
+
+async function setupHolidays() {
+	const todayKey = getTodayKey();
+	const todayToggle = document.getElementById("holidayTodayToggle");
+	const dateInput = document.getElementById("holidayDateInput");
+	const addButton = document.getElementById("holidayAddButton");
+	const errorMessage = document.getElementById("holidayError");
+
+	const { holidays } = await getFromStorage("holidays");
+	const stored = normalizeHolidays(holidays);
+	holidayDates = pruneHolidays(stored, todayKey);
+
+	// Dates that have already passed can never match again, so drop them on
+	// the way in and keep sync storage small.
+	if (holidayDates.length !== stored.length) {
+		await setStorage("holidays", holidayDates);
+	}
+
+	dateInput.min = todayKey;
+
+	todayToggle.addEventListener("change", () => {
+		setErrorMessage(errorMessage);
+		holidayDates = todayToggle.checked
+			? [...holidayDates, todayKey]
+			: holidayDates.filter((date) => date !== todayKey);
+		stageHolidayEdit();
+	});
+
+	addButton.addEventListener("click", () => {
+		const date = dateInput.value;
+
+		if (!isValidDateKey(date)) {
+			setErrorMessage(errorMessage, "Pick a date first");
+			return;
+		}
+		if (date < getTodayKey()) {
+			setErrorMessage(errorMessage, "That date has already passed");
+			return;
+		}
+		if (holidayDates.includes(date)) {
+			setErrorMessage(errorMessage, "That date is already marked");
+			return;
+		}
+
+		setErrorMessage(errorMessage);
+		holidayDates = [...holidayDates, date];
+		dateInput.value = "";
+		stageHolidayEdit();
+	});
+
+	renderHolidays();
 }
 
 document.addEventListener("DOMContentLoaded", handleDOMLoad);
@@ -172,7 +248,10 @@ async function handleDOMLoad() {
 		enableSaveButton();
 	});
 
-	// Save changes
+	// Save changes. The markup only carries the "disabled" class, which greys
+	// the button out without blocking a click; match the property to it so an
+	// untouched popup cannot fire a save and reload the tab.
+	saveButton.disabled = true;
 	saveButton.addEventListener("click", handleSaveClick);
 
 	// Back up the rules to a file, or load them back in
@@ -184,6 +263,8 @@ async function handleDOMLoad() {
 		.getElementById("importButton")
 		.addEventListener("click", () => importFile.click());
 	importFile.addEventListener("change", handleImportFile);
+
+	await setupHolidays();
 
 	// Load domainEmails from storage
 	let { domainEmails } = await getFromStorage("domainEmails");
@@ -216,8 +297,15 @@ function populateDomainEmailList(container, domainEmails) {
 	container.innerHTML = "";
 
 	for (const [domain, value] of Object.entries(domainEmails)) {
-		const { email, enabled, days, timeEnabled, startTime, endTime } =
-			normalizeDomainSetting(value);
+		const {
+			email,
+			enabled,
+			days,
+			timeEnabled,
+			startTime,
+			endTime,
+			skipOnHolidays,
+		} = normalizeDomainSetting(value);
 
 		addDomainEmailPair(
 			container,
@@ -227,7 +315,8 @@ function populateDomainEmailList(container, domainEmails) {
 			days,
 			timeEnabled,
 			startTime,
-			endTime
+			endTime,
+			skipOnHolidays
 		);
 	}
 }
@@ -240,7 +329,8 @@ function addDomainEmailPair(
 	days = [...ALL_DAYS],
 	timeEnabled = false,
 	startTime = "",
-	endTime = ""
+	endTime = "",
+	skipOnHolidays = false
 ) {
 	const domainEmailContainer = document.createElement("div");
 	domainEmailContainer.className = "domain-email-container";
@@ -434,6 +524,30 @@ function addDomainEmailPair(
 	const timeErrorMessage = document.createElement("div");
 	timeErrorMessage.className = "error-message time-error-message";
 	timeRow.appendChild(timeErrorMessage);
+
+	// Opting this rule out of the dates marked in the header. Rules that leave
+	// it unchecked keep running on a holiday.
+	const holidayRow = document.createElement("div");
+	holidayRow.className = "holiday-row";
+
+	const holidayToggleLabel = document.createElement("label");
+	holidayToggleLabel.className = "time-toggle-label";
+	holidayToggleLabel.title =
+		"Skip this rule on the dates marked as holidays above";
+
+	const holidayToggle = document.createElement("input");
+	holidayToggle.type = "checkbox";
+	holidayToggle.className = "holiday-toggle";
+	holidayToggle.checked = skipOnHolidays;
+	holidayToggle.addEventListener("change", enableSaveButton);
+
+	const holidayToggleText = document.createElement("span");
+	holidayToggleText.textContent = "Pause on holidays";
+
+	holidayToggleLabel.appendChild(holidayToggle);
+	holidayToggleLabel.appendChild(holidayToggleText);
+	holidayRow.appendChild(holidayToggleLabel);
+	contentWrapper.appendChild(holidayRow);
 
 	domainEmailContainer.appendChild(contentWrapper);
 
@@ -662,6 +776,7 @@ function collectDomainEmailsFromForm() {
 		const timeErrorMessage = container.querySelector(".time-error-message");
 		const daysErrorMessage = container.querySelector(".days-error-message");
 		const timeToggleInput = container.querySelector(".time-toggle");
+		const holidayToggleInput = container.querySelector(".holiday-toggle");
 		const startTimeInput = container.querySelector(".start-time-input");
 		const endTimeInput = container.querySelector(".end-time-input");
 
@@ -669,6 +784,9 @@ function collectDomainEmailsFromForm() {
 		const email = emailInput.value.trim();
 		const enabled = toggleInput ? toggleInput.checked : true;
 		const timeEnabled = timeToggleInput ? timeToggleInput.checked : false;
+		const skipOnHolidays = holidayToggleInput
+			? holidayToggleInput.checked
+			: false;
 		const startTime = startTimeInput ? startTimeInput.value : "";
 		const endTime = endTimeInput ? endTimeInput.value : "";
 
@@ -747,11 +865,14 @@ function collectDomainEmailsFromForm() {
 		}
 
 		// Save the domain-email pair
+		// Optional fields are only written when switched on, so a rule that
+		// uses none of them stays as small in storage as it always was.
 		domainEmails[mappedDomain] = {
 			email,
 			enabled,
 			days,
 			...(timeEnabled ? { timeEnabled: true, startTime, endTime } : {}),
+			...(skipOnHolidays ? { skipOnHolidays: true } : {}),
 		};
 	});
 
@@ -768,6 +889,11 @@ async function handleSaveClick() {
 
 	try {
 		await setStorage("domainEmails", domainEmails);
+		// Left alone unless a date was marked, cleared, or imported this time
+		// round.
+		if (holidaysPendingSave) {
+			await persistHolidays();
+		}
 	} catch (error) {
 		console.error("Failed to save settings:", error);
 		const saveButton = document.getElementById("saveButton");
@@ -792,16 +918,9 @@ async function handleSaveClick() {
 		saveButton.textContent = "Save Changes";
 	}, 2000);
 
-	// Settings are saved at this point; reloading the active tab is only a
-	// convenience, so a failure here is not worth surfacing. tabs.reload()
-	// with no arguments reloads the selected tab of the current window and,
-	// unlike scripting.executeScript() or reading a tab's url, needs no
-	// permission of its own — which keeps the manifest down to "storage".
-	try {
-		await chrome.tabs.reload();
-	} catch (error) {
-		console.warn("Could not reload active tab:", error);
-	}
+	// Settings are saved at this point; the reload just lets the page in front
+	// of the user pick them up.
+	await reloadActiveTab();
 }
 
 /* -------------------------------------------------------------------------
@@ -813,10 +932,14 @@ async function handleSaveClick() {
  * ---------------------------------------------------------------------- */
 
 const EXPORT_APP_ID = "preferred-account-login";
-const EXPORT_FORMAT_VERSION = 1;
+const EXPORT_FORMAT_VERSION = 2;
 
 function ruleCountLabel(count) {
 	return count === 1 ? "1 rule" : `${count} rules`;
+}
+
+function holidayCountLabel(count) {
+	return count === 1 ? "1 holiday date" : `${count} holiday dates`;
 }
 
 function setTransferStatus(message = "", isError = false) {
@@ -876,8 +999,15 @@ function handleExportClick() {
 		formatVersion: EXPORT_FORMAT_VERSION,
 		exportedAt: new Date().toISOString(),
 		rules,
+		holidays: holidayDates,
 	});
-	setTransferStatus(`Exported ${ruleCountLabel(count)}.`);
+	setTransferStatus(
+		`Exported ${ruleCountLabel(count)}` +
+			(holidayDates.length
+				? ` and ${holidayCountLabel(holidayDates.length)}`
+				: "") +
+			"."
+	);
 }
 
 // Accepts a file this extension wrote, or a bare { domain: setting } map, so a
@@ -964,6 +1094,16 @@ async function handleImportFile(event) {
 		return;
 	}
 
+	// Holiday dates ride along with the rules and are staged the same way a
+	// hand-marked date is. A file written before format version 2 carries
+	// none, and leaves the current dates alone.
+	let importedHolidays = null;
+	if (Array.isArray(parsed.holidays)) {
+		holidayDates = pruneHolidays(parsed.holidays, getTodayKey());
+		importedHolidays = holidayDates.length;
+		stageHolidayEdit();
+	}
+
 	// Replace the list rather than merging it, so an exported file restores
 	// exactly what it captured. Nothing reaches storage until Save Changes, so
 	// closing the popup undoes this.
@@ -971,6 +1111,9 @@ async function handleImportFile(event) {
 	enableSaveButton();
 	setTransferStatus(
 		`Loaded ${ruleCountLabel(count)}` +
+			(importedHolidays === null
+				? ""
+				: ` and ${holidayCountLabel(importedHolidays)}`) +
 			(skipped ? `, skipped ${skipped}` : "") +
 			". Choose Save Changes to keep them."
 	);

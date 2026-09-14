@@ -131,6 +131,121 @@ body {
 }
 
 /* Domain List Container */
+/* Holiday Bar — the shared list of dates rules can opt out of. Edits here
+   are written to storage immediately, so it sits outside the rule list and
+   away from Save Changes. */
+.holiday-bar {
+	background-color: var(--md-sys-color-surface);
+	padding: 12px 24px;
+	box-shadow: 0 1px 0 var(--md-sys-color-outline-variant);
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.holiday-controls {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
+.holiday-today {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+	color: var(--md-sys-color-on-surface);
+	font-family: var(--md-sys-typescale-label-large-font);
+	font-size: var(--md-sys-typescale-label-large-size);
+	font-weight: var(--md-sys-typescale-label-large-weight);
+}
+
+.holiday-today input {
+	margin: 0;
+	accent-color: var(--md-sys-color-primary);
+	width: 16px;
+	height: 16px;
+	flex: none;
+}
+
+.holiday-today small {
+	color: var(--md-sys-color-on-surface-variant);
+	font-weight: var(--md-sys-typescale-body-medium-weight);
+	margin-left: 4px;
+}
+
+.holiday-add {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.holiday-add input[type="date"] {
+	height: 36px;
+	padding: 0 12px;
+	border: 1px solid var(--md-sys-color-outline);
+	border-radius: var(--md-sys-shape-corner-small);
+	background-color: var(--md-sys-color-surface);
+	color: var(--md-sys-color-on-surface);
+	font-family: var(--md-sys-typescale-body-medium-font);
+	font-size: var(--md-sys-typescale-body-medium-size);
+}
+
+/* The global button rule stretches buttons to fill their row; this one is
+   sized to its label instead. */
+.holiday-add button {
+	height: 36px;
+}
+
+.holiday-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.holiday-chips:empty {
+	display: none;
+}
+
+.holiday-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 4px 4px 12px;
+	border-radius: var(--md-sys-shape-corner-full);
+	background-color: var(--md-sys-color-surface-variant);
+	color: var(--md-sys-color-on-surface-variant);
+	font-family: var(--md-sys-typescale-body-medium-font);
+	font-size: var(--md-sys-typescale-body-medium-size);
+}
+
+.holiday-chip.today {
+	background-color: var(--md-sys-color-primary-container);
+	color: var(--md-sys-color-on-primary-container);
+}
+
+.holiday-chip-remove {
+	flex: none;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	border-radius: var(--md-sys-shape-corner-full);
+	background-color: transparent;
+	color: inherit;
+	font-size: 16px;
+	line-height: 1;
+}
+
+.holiday-chip-remove:hover {
+	background-color: rgba(0, 0, 0, 0.08);
+}
+
+.holiday-bar .error-message {
+	margin-left: 0;
+}
+
 .domain-email-list {
 	padding: 24px;
 	display: flex;
@@ -193,7 +308,8 @@ body {
 	cursor: pointer;
 }
 
-.time-toggle {
+.time-toggle,
+.holiday-toggle {
 	margin: 0;
 	accent-color: var(--md-sys-color-primary);
 	width: 16px;

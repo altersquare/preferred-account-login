@@ -4,6 +4,37 @@ Notable changes to Preferred Account Login. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and versions follow the
 `version` field in `manifest.json`.
 
+## [7.5.0] — 2026-09-14
+
+### Added
+
+- **Holidays**: a shared list of dates, marked from the popup header — either
+  "Today is a holiday" for the current day or the date field for one coming up.
+  Rules opt in individually with **Pause on holidays**, so a marked date
+  silences the rules that observe it and leaves the rest running. Holiday dates
+  and the rule's own checkbox are ordinary pending edits: they show on screen,
+  enable `Save Changes`, and are written — with the active tab reloaded — only
+  when it is clicked. Closing the popup discards them. Dates that have passed
+  are dropped the next time the popup opens.
+- Holiday dates and each rule's **Pause on holidays** setting now travel with
+  exported rule files (format version 2). Imported dates are staged like the
+  rules — shown in the header, written only by `Save Changes` — so loading a
+  file and closing the popup leaves storage untouched. Files written by earlier
+  versions still import; they carry no dates and leave the marked ones alone.
+
+### Fixed
+
+- The `Save Changes` button was greyed out but still clickable when the popup
+  opened, so a stray click on an untouched popup saved and reloaded the tab.
+
+### Changed
+
+- The rule schema and the checks that decide whether a rule applies right now
+  moved into `src/rules.js`, loaded by both the content script and the popup.
+  The checks are an ordered list rather than a chain of early returns, so a new
+  condition — holidays being the first — is one entry in that list instead of
+  an edit in every file that had its own copy of the logic.
+
 ## [7.4.0] — 2026-09-01
 
 ### Added

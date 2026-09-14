@@ -1,7 +1,7 @@
 {
 	"manifest_version": 3,
 	"name": "Preferred Account Login",
-	"version": "7.4.0",
+	"version": "7.5.0",
 	"description": "Open each service with the account you chose. No more switching between accounts.",
 	"permissions": [
 		"storage"
@@ -28,6 +28,7 @@
 				"*://*.ai.google/*"
 			],
 			"js": [
+				"src/rules.js",
 				"src/content.js"
 			],
 			"run_at": "document_start"

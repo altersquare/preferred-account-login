@@ -222,6 +222,83 @@ async function setupHolidays() {
 	renderHolidays();
 }
 
+/* -------------------------------------------------------------------------
+ * Pause
+ *
+ * A global "stop everything for a bit" control, independent of Enable
+ * Extension and of every rule's own toggle. Stored as a single timestamp,
+ * pausedUntil (ms since epoch), so the content script only has to compare it
+ * against Date.now() — no timer or background page is needed to make a
+ * pause expire on its own.
+ *
+ * Choosing a duration writes to storage immediately, like the Enable
+ * Extension toggle, and reloads the active tab: the point of pausing is to
+ * take effect on the page in front of the user right now, not after Save
+ * Changes.
+ * ---------------------------------------------------------------------- */
+
+let pauseCountdownIntervalId = null;
+
+function formatPauseCountdown(remainingMs) {
+	const totalSeconds = Math.ceil(remainingMs / 1000);
+	const minutes = Math.floor(totalSeconds / 60);
+	const seconds = totalSeconds % 60;
+	return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+// Swaps the duration buttons for a countdown (or back) and keeps the
+// countdown ticking while the popup stays open.
+function renderPauseState(pausedUntil) {
+	const controls = document.getElementById("pauseControls");
+	const active = document.getElementById("pauseActive");
+	const countdown = document.getElementById("pauseCountdown");
+
+	clearInterval(pauseCountdownIntervalId);
+	pauseCountdownIntervalId = null;
+
+	const remainingMs = getPauseRemainingMs(pausedUntil);
+	if (remainingMs <= 0) {
+		controls.hidden = false;
+		active.hidden = true;
+		return;
+	}
+
+	controls.hidden = true;
+	active.hidden = false;
+	countdown.textContent = formatPauseCountdown(remainingMs);
+
+	pauseCountdownIntervalId = setInterval(() => {
+		const msLeft = getPauseRemainingMs(pausedUntil);
+		if (msLeft <= 0) {
+			renderPauseState(0);
+			return;
+		}
+		countdown.textContent = formatPauseCountdown(msLeft);
+	}, 1000);
+}
+
+async function setPausedUntil(pausedUntil) {
+	await setStorage("pausedUntil", pausedUntil);
+	renderPauseState(pausedUntil);
+	await reloadActiveTab();
+}
+
+async function setupPause() {
+	const { pausedUntil } = await getFromStorage("pausedUntil");
+	renderPauseState(pausedUntil || 0);
+
+	document.querySelectorAll(".pause-btn").forEach((button) => {
+		button.addEventListener("click", () => {
+			const minutes = Number(button.dataset.minutes);
+			setPausedUntil(Date.now() + minutes * 60 * 1000);
+		});
+	});
+
+	document
+		.getElementById("pauseResumeButton")
+		.addEventListener("click", () => setPausedUntil(0));
+}
+
 document.addEventListener("DOMContentLoaded", handleDOMLoad);
 
 async function handleDOMLoad() {
@@ -264,6 +341,7 @@ async function handleDOMLoad() {
 		.addEventListener("click", () => importFile.click());
 	importFile.addEventListener("change", handleImportFile);
 
+	await setupPause();
 	await setupHolidays();
 
 	// Load domainEmails from storage

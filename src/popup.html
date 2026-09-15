@@ -109,6 +109,48 @@
 			</label>
 		</div>
 
+		<!-- Pause everything for a short while, e.g. to sign in as a
+		     different account without the extension interfering. Writes to
+		     storage immediately, like Enable Extension above, rather than
+		     waiting on Save Changes. -->
+		<div class="pause-bar" id="pauseBar">
+			<div class="pause-controls" id="pauseControls">
+				<span class="pause-label">Pause everything</span>
+				<div class="pause-buttons">
+					<button
+						type="button"
+						class="textButton pause-btn"
+						data-minutes="10"
+					>
+						10 min
+					</button>
+					<button
+						type="button"
+						class="textButton pause-btn"
+						data-minutes="15"
+					>
+						15 min
+					</button>
+					<button
+						type="button"
+						class="textButton pause-btn"
+						data-minutes="30"
+					>
+						30 min
+					</button>
+				</div>
+			</div>
+			<div class="pause-active" id="pauseActive" hidden>
+				<span class="pause-status"
+					>Paused · resumes in
+					<strong id="pauseCountdown"></strong
+				></span>
+				<button type="button" class="textButton" id="pauseResumeButton">
+					Resume now
+				</button>
+			</div>
+		</div>
+
 		<!-- Shared holiday dates. Rules opt in with "Pause on holidays". -->
 		<div class="holiday-bar">
 			<div class="holiday-controls">

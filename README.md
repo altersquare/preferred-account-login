@@ -1,5 +1,7 @@
 # Preferred Account Login
 
+<img src="icons/icon128.png" alt="Preferred Account Login icon" width="96" height="96">
+
 A Chrome extension that automatically adds the `authuser` parameter to Google domains, allowing you to set your preferred Google account for each service.
 
 ## Overview
@@ -12,14 +14,30 @@ If you use multiple Google accounts (personal, work, school), you know the frust
 - **Day-Based Rules**: Choose which days each domain rule should apply
 - **Optional Active Hours**: Add a start and end time so a rule only runs during a specific window on the selected days
 - **Holidays**: Mark a date as a holiday and every rule set to "Pause on holidays" stands down for that day, leaving the rest running
+- **Global Pause**: Pause the entire extension for 10, 15, or 30 minutes from the popup header when you need every rule to stand down at once
+- **Dark Theme**: Toggle between light and dark from the popup header; the choice is remembered per-profile
 - **Auto-Redirect**: Automatically redirects to add the `authuser` parameter when you visit a configured Google domain
 - **Smart Loop Prevention**: Intelligently prevents redirect loops
 - **Any Google Domain**: Enter any domain under `google.com`, `youtube.com`, or `ai.google` — new Google services work without an extension update
 - **Google Domain Autocomplete**: Includes autocomplete suggestions for popular Google domains
-- **User-Friendly Interface**: Clean, modern UI with toggle to quickly enable/disable the extension
+- **User-Friendly Interface**: Clean, modern UI with a collapsible rule list and toggle to quickly enable/disable the extension
 - **Multiple Account Support**: Easily manage multiple Google accounts across different services
 - **Export & Import**: Save your rules to a JSON file and load them back on another profile or browser
 - **Privacy-Focused**: No data collection, all settings stored locally in your browser
+
+## Screenshots
+
+| Overview | Many Rules |
+| --- | --- |
+| ![Overview of the popup](store-assets/screenshot-01-overview.png) | ![Managing many rules](store-assets/screenshot-02-many-rules.png) |
+
+| Day & Active Hours | Holidays |
+| --- | --- |
+| ![Day-based and active-hours scheduling](store-assets/screenshot-03-schedule.png) | ![Holidays pausing a rule](store-assets/screenshot-04-holidays.png) |
+
+| Export & Import |
+| --- |
+| ![Exporting and importing rules](store-assets/screenshot-05-export-import.png) |
 
 ## Installation
 
@@ -136,6 +154,9 @@ The extension:
 - `src/rules.js` holds the rule schema and the ordered activation checks that
   decide whether a rule applies; the popup and the content script both load it,
   so a new condition is added in one place
+- `src/theme.js` stamps the saved light/dark choice on `<html>` from
+  `localStorage` before the popup's first paint, avoiding a flash of the wrong
+  theme
 - Modern ES6+ JavaScript features for clean, maintainable code
 - Responsive UI design that works across different screen sizes
 - Code formatting with Prettier and linting with ESLint
@@ -177,7 +198,8 @@ Contributions are welcome! To contribute:
 │   ├── popup.css      # Extension popup styles
 │   ├── popup.html     # Extension popup interface
 │   ├── popup.js       # Popup functionality
-│   └── rules.js       # Shared rule schema and activation checks
+│   ├── rules.js       # Shared rule schema and activation checks
+│   └── theme.js       # Blocking script that applies the saved light/dark theme before first paint
 ├── .gitattributes     # Git attributes (keeps LF endings on shell scripts)
 ├── .gitignore         # Git ignore file
 ├── .prettierrc.js     # Prettier configuration

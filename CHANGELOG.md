@@ -4,6 +4,35 @@ Notable changes to Preferred Account Login. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and versions follow the
 `version` field in `manifest.json`.
 
+## [7.7.0] — 2026-09-15
+
+### Added
+
+- **Dark theme**: a toggle in the header switches between light and dark.
+  Every colour in `popup.css` is a token that redefines under
+  `[data-theme="dark"]`, and a small blocking script, `src/theme.js`, stamps
+  the choice on `<html>` from `localStorage` before the popup's first paint —
+  reading it from `chrome.storage` instead would land a frame late and flash
+  the wrong theme. The choice is per-profile and does not sync across
+  machines. Light is the default regardless of the system theme.
+
+### Changed
+
+- **Redesigned popup**: each rule now collapses to a single summary row — a
+  coloured initial tile, domain, account, days, and active hours read as one
+  line — and opens into an editing drawer on click. The row's own switch
+  still enables or disables the rule without opening it. `Remove` moved
+  inside the drawer so a stray click on the list can no longer delete a rule.
+  Pause and holiday controls now share one "Overrides" group above the rule
+  list, and `Export`/`Import` moved behind a menu button in the footer,
+  leaving `Add domain` and `Save Changes` as the two visible actions.
+- A long rule list now shows a real scrollbar instead of Chrome's overlay one,
+  which faded out after scrolling and left no sign that the list continued
+  past the fold. Both the track and the thumb are drawn, so the channel reads
+  as scrollable even with the thumb parked at the top, and its width is held
+  open whether or not it is showing, so the rule that first makes the popup
+  scrollable no longer narrows every card.
+
 ## [7.5.0] — 2026-09-14
 
 ### Added

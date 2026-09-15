@@ -1,14 +1,17 @@
 <!doctype html>
-<html>
+<html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<title>Authuser Config</title>
+		<title>Preferred Account Login</title>
+		<!-- Runs before the body parses so the popup never flashes the wrong
+		     theme. Must stay a blocking script in <head>. -->
+		<script src="theme.js"></script>
 		<link rel="stylesheet" href="popup.css" />
 	</head>
 
 	<body>
-		<div class="heading-wrapper">
-			<div class="heading">
+		<header class="topbar">
+			<div class="brand">
 				<svg
 					class="brand-icon"
 					viewBox="0 0 128 128"
@@ -63,7 +66,6 @@
 						fill="url(#pal-bg)"
 					/>
 
-					<!-- subtle top-left highlight, fading out with no hard edge -->
 					<g clip-path="url(#pal-squircle)">
 						<ellipse
 							cx="34"
@@ -74,13 +76,11 @@
 						/>
 					</g>
 
-					<!-- avatar: head + shoulders -->
 					<g clip-path="url(#pal-squircle)">
 						<circle cx="56" cy="50" r="18" fill="#ffffff" />
 						<path d="M26 102 a30 27 0 0 1 60 0 z" fill="#ffffff" />
 					</g>
 
-					<!-- checkmark badge -->
 					<circle
 						cx="92"
 						cy="88"
@@ -98,90 +98,202 @@
 						stroke-linejoin="round"
 					/>
 				</svg>
-				Preferred Account Login
+				<span class="brand-name">Preferred Account Login</span>
 			</div>
-			<label class="toggle-wrapper">
-				<div class="switch">
-					<input type="checkbox" id="authuserToggle" />
-					<span class="slider"></span>
-				</div>
-				<span>Enable Extension</span>
-			</label>
-		</div>
 
-		<!-- Pause everything for a short while, e.g. to sign in as a
-		     different account without the extension interfering. Writes to
-		     storage immediately, like Enable Extension above, rather than
-		     waiting on Save Changes. -->
-		<div class="pause-bar" id="pauseBar">
-			<div class="pause-controls" id="pauseControls">
-				<span class="pause-label">Pause everything</span>
-				<div class="pause-buttons">
-					<button
-						type="button"
-						class="textButton pause-btn"
-						data-minutes="10"
+			<div class="topbar-actions">
+				<button
+					type="button"
+					class="icon-button"
+					id="themeToggle"
+					aria-label="Switch to dark theme"
+					aria-pressed="false"
+					title="Switch theme"
+				>
+					<svg
+						class="icon-sun"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						aria-hidden="true"
 					>
-						10 min
-					</button>
-					<button
-						type="button"
-						class="textButton pause-btn"
-						data-minutes="15"
+						<circle cx="12" cy="12" r="4.2" />
+						<path
+							d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6M18.6 5.4l-1.6 1.6M7 17l-1.6 1.6M18.6 18.6L17 17M7 7L5.4 5.4"
+						/>
+					</svg>
+					<svg
+						class="icon-moon"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
 					>
-						15 min
-					</button>
-					<button
-						type="button"
-						class="textButton pause-btn"
-						data-minutes="30"
-					>
-						30 min
-					</button>
-				</div>
-			</div>
-			<div class="pause-active" id="pauseActive" hidden>
-				<span class="pause-status"
-					>Paused · resumes in
-					<strong id="pauseCountdown"></strong
-				></span>
-				<button type="button" class="textButton" id="pauseResumeButton">
-					Resume now
+						<path
+							d="M20 14.2A8.4 8.4 0 0 1 9.8 4a8.4 8.4 0 1 0 10.2 10.2z"
+						/>
+					</svg>
 				</button>
-			</div>
-		</div>
 
-		<!-- Shared holiday dates. Rules opt in with "Pause on holidays". -->
-		<div class="holiday-bar">
-			<div class="holiday-controls">
-				<label class="holiday-today">
-					<input type="checkbox" id="holidayTodayToggle" />
-					<span
-						>Today is a holiday <small id="holidayTodayDate"></small
-					></span>
+				<label class="master-toggle">
+					<span class="status" id="masterStatus">
+						<i aria-hidden="true"></i>
+						<span id="masterStatusText">Active</span>
+					</span>
+					<span class="switch">
+						<input type="checkbox" id="authuserToggle" />
+						<span class="slider"></span>
+					</span>
 				</label>
-				<div class="holiday-add">
-					<input type="date" id="holidayDateInput" />
-					<button class="textButton" id="holidayAddButton">
-						Mark date
-					</button>
-				</div>
 			</div>
-			<div class="error-message" id="holidayError"></div>
-			<div class="holiday-chips" id="holidayChips"></div>
-		</div>
+		</header>
 
-		<div class="domain-email-list" id="domainEmailList">
-			<!-- Dynamic content will be inserted here -->
-		</div>
-		<div class="footer">
-			<div class="button-row">
-				<button class="textButton" id="exportButton">Export</button>
-				<button class="textButton" id="importButton">Import</button>
-				<button class="addButton disabled" id="addButton">
-					Add Domain
+		<main class="content" id="content">
+			<!-- Temporary overrides: both controls here take effect without
+			     waiting on Save Changes, which is why they sit apart from the
+			     rule list. -->
+			<section class="section">
+				<h2 class="section-caption">Overrides</h2>
+				<div class="group">
+					<div class="line" id="pauseBar">
+						<div class="line-text">
+							<b>Pause everything</b>
+							<small>Sign in with any account for a while</small>
+						</div>
+						<div class="pause-controls" id="pauseControls">
+							<div class="segmented">
+								<button
+									type="button"
+									class="pause-btn"
+									data-minutes="10"
+								>
+									10 min
+								</button>
+								<button
+									type="button"
+									class="pause-btn"
+									data-minutes="15"
+								>
+									15 min
+								</button>
+								<button
+									type="button"
+									class="pause-btn"
+									data-minutes="30"
+								>
+									30 min
+								</button>
+							</div>
+						</div>
+						<div class="pause-active" id="pauseActive" hidden>
+							<span class="pause-status">
+								Resumes in
+								<strong id="pauseCountdown"></strong>
+							</span>
+							<button
+								type="button"
+								class="button text"
+								id="pauseResumeButton"
+							>
+								Resume now
+							</button>
+						</div>
+					</div>
+
+					<label class="line" for="holidayTodayToggle">
+						<div class="line-text">
+							<b>Today is a holiday</b>
+							<small>
+								<span id="holidayTodayDate"></span> · pauses
+								rules that opt in
+							</small>
+						</div>
+						<span class="switch">
+							<input type="checkbox" id="holidayTodayToggle" />
+							<span class="slider"></span>
+						</span>
+					</label>
+
+					<div class="line line-stack">
+						<div class="line-row">
+							<div class="line-text">
+								<b>Holiday dates</b>
+								<small>Marked days rules can skip</small>
+							</div>
+							<div class="holiday-add">
+								<input
+									type="date"
+									id="holidayDateInput"
+									aria-label="Holiday date"
+								/>
+								<button
+									type="button"
+									class="button text"
+									id="holidayAddButton"
+								>
+									Mark date
+								</button>
+							</div>
+						</div>
+						<div class="error-message" id="holidayError"></div>
+						<div class="holiday-chips" id="holidayChips"></div>
+					</div>
+				</div>
+			</section>
+
+			<section class="section">
+				<h2 class="section-caption">
+					Rules <span id="ruleCount" class="count"></span>
+				</h2>
+				<div class="group" id="domainEmailList">
+					<!-- Rule rows are inserted here -->
+				</div>
+			</section>
+		</main>
+
+		<footer class="footer">
+			<div class="footer-row">
+				<div class="menu-wrapper">
+					<button
+						type="button"
+						class="icon-button bordered"
+						id="moreButton"
+						aria-label="Export or import rules"
+						aria-haspopup="true"
+						aria-expanded="false"
+						title="Export or import"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							fill="currentColor"
+							aria-hidden="true"
+						>
+							<circle cx="5" cy="12" r="1.7" />
+							<circle cx="12" cy="12" r="1.7" />
+							<circle cx="19" cy="12" r="1.7" />
+						</svg>
+					</button>
+					<div class="menu" id="moreMenu" hidden>
+						<button type="button" id="exportButton">
+							Export rules
+						</button>
+						<button type="button" id="importButton">
+							Import rules
+						</button>
+					</div>
+				</div>
+
+				<span class="spacer"></span>
+
+				<button class="button outlined disabled" id="addButton">
+					Add domain
 				</button>
-				<button class="saveButton disabled" id="saveButton">
+				<button class="button filled disabled" id="saveButton">
 					Save Changes
 				</button>
 			</div>
@@ -197,7 +309,8 @@
 				accept="application/json,.json"
 				hidden
 			/>
-		</div>
+		</footer>
+
 		<script src="rules.js"></script>
 		<script src="popup.js"></script>
 	</body>

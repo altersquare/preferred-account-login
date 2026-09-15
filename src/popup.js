@@ -76,6 +76,21 @@ function resolveDomainInput(input) {
 function setErrorMessage(element, message = "") {
 	element.textContent = message;
 	element.style.display = message ? "block" : "none";
+
+	// A rule's fields live in a drawer that is closed by default, so an error
+	// raised against a collapsed rule would otherwise be written somewhere the
+	// user cannot see. Opening the rule is what makes Save Changes failing on
+	// a hidden field legible.
+	if (message) {
+		const rule = element.closest?.(".domain-email-container");
+		if (rule) {
+			rule.classList.add("open");
+			rule.querySelector(".rule-summary")?.setAttribute(
+				"aria-expanded",
+				"true"
+			);
+		}
+	}
 }
 
 /* -------------------------------------------------------------------------
@@ -249,6 +264,7 @@ function formatPauseCountdown(remainingMs) {
 // Swaps the duration buttons for a countdown (or back) and keeps the
 // countdown ticking while the popup stays open.
 function renderPauseState(pausedUntil) {
+	const bar = document.getElementById("pauseBar");
 	const controls = document.getElementById("pauseControls");
 	const active = document.getElementById("pauseActive");
 	const countdown = document.getElementById("pauseCountdown");
@@ -260,11 +276,15 @@ function renderPauseState(pausedUntil) {
 	if (remainingMs <= 0) {
 		controls.hidden = false;
 		active.hidden = true;
+		bar.classList.remove("paused");
 		return;
 	}
 
 	controls.hidden = true;
 	active.hidden = false;
+	// Tints the whole row, so a paused extension is visible without reading
+	// the countdown.
+	bar.classList.add("paused");
 	countdown.textContent = formatPauseCountdown(remainingMs);
 
 	pauseCountdownIntervalId = setInterval(() => {
@@ -299,6 +319,81 @@ async function setupPause() {
 		.addEventListener("click", () => setPausedUntil(0));
 }
 
+/* -------------------------------------------------------------------------
+ * Theme
+ *
+ * theme.js has already stamped data-theme on <html> before first paint; this
+ * only handles the toggle and writes the choice back. The value lives in
+ * localStorage rather than chrome.storage so that bootstrap can read it
+ * synchronously — see the comment at the top of theme.js.
+ * ---------------------------------------------------------------------- */
+
+function setupTheme() {
+	const root = document.documentElement;
+	const button = document.getElementById("themeToggle");
+
+	function apply(theme) {
+		const isDark = theme === "dark";
+		root.dataset.theme = isDark ? "dark" : "light";
+		button.setAttribute("aria-pressed", String(isDark));
+		button.setAttribute(
+			"aria-label",
+			isDark ? "Switch to light theme" : "Switch to dark theme"
+		);
+	}
+
+	apply(root.dataset.theme);
+
+	button.addEventListener("click", () => {
+		const next = root.dataset.theme === "dark" ? "light" : "dark";
+		apply(next);
+		try {
+			localStorage.setItem("pal-theme", next);
+		} catch {
+			// Nothing to do: the theme still applies for this session.
+		}
+	});
+}
+
+// Export and Import are rare next to Add domain and Save Changes, so they
+// move behind a menu and leave the footer to the two daily actions.
+function setupOverflowMenu() {
+	const button = document.getElementById("moreButton");
+	const menu = document.getElementById("moreMenu");
+
+	function close() {
+		menu.hidden = true;
+		button.setAttribute("aria-expanded", "false");
+	}
+
+	button.addEventListener("click", (event) => {
+		event.stopPropagation();
+		const willOpen = menu.hidden;
+		menu.hidden = !willOpen;
+		button.setAttribute("aria-expanded", String(willOpen));
+	});
+
+	menu.addEventListener("click", close);
+
+	document.addEventListener("click", (event) => {
+		if (!menu.hidden && !menu.contains(event.target)) close();
+	});
+
+	document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") close();
+	});
+}
+
+// Says whether the extension is working, rather than repeating the name of
+// the control next to it.
+function renderMasterStatus(isEnabled) {
+	const status = document.getElementById("masterStatus");
+	status.classList.toggle("off", !isEnabled);
+	document.getElementById("masterStatusText").textContent = isEnabled
+		? "Active"
+		: "Off";
+}
+
 document.addEventListener("DOMContentLoaded", handleDOMLoad);
 
 async function handleDOMLoad() {
@@ -307,21 +402,30 @@ async function handleDOMLoad() {
 	const addButton = document.getElementById("addButton");
 	const saveButton = document.getElementById("saveButton");
 
+	setupTheme();
+	setupOverflowMenu();
+
 	// Load the toggle state from storage
 	let { isEnabled } = await getFromStorage("isEnabled");
 	if (!isEnabled) isEnabled = false;
 	toggle.checked = isEnabled;
+	renderMasterStatus(isEnabled);
 
 	// Save the toggle state when it changes
 	toggle.addEventListener("change", async () => {
+		renderMasterStatus(toggle.checked);
 		await setStorage("isEnabled", toggle.checked);
 		enableSaveButton();
 	});
 
-	// Add a new domain-email pair
+	// Add a new domain-email pair. The scroller is the whole content column
+	// now, not the rule list, so the new row is brought into view rather than
+	// the list scrolled inside itself.
 	addButton.addEventListener("click", () => {
 		addDomainEmailPair(domainEmailList);
-		domainEmailList.scrollTop = domainEmailList.scrollHeight;
+		domainEmailList.lastElementChild?.scrollIntoView({
+			block: "nearest",
+		});
 		enableSaveButton();
 	});
 
@@ -397,6 +501,59 @@ function populateDomainEmailList(container, domainEmails) {
 			skipOnHolidays
 		);
 	}
+
+	// addDomainEmailPair keeps the count in step as rows arrive; this covers
+	// the case where an import or a clear leaves none.
+	updateRuleCount();
+}
+
+const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const DAY_NAMES = [
+	"Sunday",
+	"Monday",
+	"Tuesday",
+	"Wednesday",
+	"Thursday",
+	"Friday",
+	"Saturday",
+];
+const DAY_SHORT_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Keeps the section caption honest as rules come and go.
+function updateRuleCount() {
+	const count = document.querySelectorAll(".domain-email-container").length;
+	const label = document.getElementById("ruleCount");
+	if (label) label.textContent = count ? `· ${count}` : "";
+}
+
+// A stable colour per domain, so the same service keeps the same tile every
+// time the popup opens and the list can be scanned by colour rather than
+// read word by word.
+function avatarGradient(text) {
+	let hash = 0;
+	for (let i = 0; i < text.length; i++) {
+		hash = (hash * 31 + text.charCodeAt(i)) % 360;
+	}
+	const hue = hash;
+	return `linear-gradient(135deg, hsl(${hue} 72% 58%), hsl(${
+		(hue + 28) % 360
+	} 68% 44%))`;
+}
+
+// "Every day" beats seven highlighted circles when the row is collapsed.
+function describeDays(days) {
+	if (!days.length) return "No days";
+	if (days.length === 7) return "Every day";
+
+	const isWeekdays =
+		days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d));
+	if (isWeekdays) return "Weekdays";
+
+	const isWeekends =
+		days.length === 2 && days.includes(0) && days.includes(6);
+	if (isWeekends) return "Weekends";
+
+	return days.map((day) => DAY_SHORT_NAMES[day]).join(", ");
 }
 
 function addDomainEmailPair(
@@ -413,77 +570,254 @@ function addDomainEmailPair(
 	const domainEmailContainer = document.createElement("div");
 	domainEmailContainer.className = "domain-email-container";
 
-	// Toggle Switch
+	/* ---------------------------------------------------------------------
+	 * Summary — the collapsed state, and the only thing on screen for a rule
+	 * the user is not editing.
+	 * ------------------------------------------------------------------ */
+
+	const summary = document.createElement("div");
+	summary.className = "rule-summary";
+	summary.setAttribute("role", "button");
+	summary.setAttribute("tabindex", "0");
+	summary.setAttribute("aria-expanded", "false");
+
+	const avatar = document.createElement("div");
+	avatar.className = "rule-avatar";
+
+	const headline = document.createElement("div");
+	headline.className = "rule-headline";
+
+	const title = document.createElement("span");
+	title.className = "rule-title";
+
+	const meta = document.createElement("div");
+	meta.className = "rule-meta";
+
+	const metaEmail = document.createElement("span");
+	metaEmail.className = "rule-meta-email";
+
+	const metaDotOne = document.createElement("span");
+	metaDotOne.className = "dot";
+
+	const metaWhen = document.createElement("span");
+	metaWhen.className = "rule-meta-when";
+
+	const metaDotTwo = document.createElement("span");
+	metaDotTwo.className = "dot";
+
+	const metaHours = document.createElement("span");
+	metaHours.className = "rule-meta-hours";
+
+	meta.append(metaEmail, metaDotOne, metaWhen, metaDotTwo, metaHours);
+	headline.append(title, meta);
+
+	// Kept as a .switch so the save-time collector still finds it.
 	const toggleWrapper = document.createElement("label");
 	toggleWrapper.className = "switch";
 	const toggleInput = document.createElement("input");
 	toggleInput.type = "checkbox";
 	toggleInput.checked = enabled;
-	toggleInput.addEventListener("change", enableSaveButton);
+	toggleInput.setAttribute("aria-label", "Enable this rule");
 
 	const slider = document.createElement("span");
-	slider.className = "slider"; // Removed 'round' as border-radius is handled in CSS
+	slider.className = "slider";
+	toggleWrapper.append(toggleInput, slider);
 
-	toggleWrapper.appendChild(toggleInput);
-	toggleWrapper.appendChild(slider);
+	const chevron = document.createElementNS(
+		"http://www.w3.org/2000/svg",
+		"svg"
+	);
+	chevron.setAttribute("class", "rule-chevron");
+	chevron.setAttribute("viewBox", "0 0 24 24");
+	chevron.setAttribute("fill", "none");
+	chevron.setAttribute("stroke", "currentColor");
+	chevron.setAttribute("stroke-width", "2.2");
+	chevron.setAttribute("stroke-linecap", "round");
+	chevron.setAttribute("stroke-linejoin", "round");
+	chevron.setAttribute("aria-hidden", "true");
+	const chevronPath = document.createElementNS(
+		"http://www.w3.org/2000/svg",
+		"path"
+	);
+	chevronPath.setAttribute("d", "M9 6l6 6-6 6");
+	chevron.appendChild(chevronPath);
 
-	domainEmailContainer.appendChild(toggleWrapper);
+	summary.append(avatar, headline, toggleWrapper, chevron);
+	domainEmailContainer.appendChild(summary);
 
-	// Content Wrapper (Inputs + Days)
-	const contentWrapper = document.createElement("div");
-	contentWrapper.className = "content-wrapper";
+	/* ---------------------------------------------------------------------
+	 * Detail — everything that was previously on screen at all times.
+	 * ------------------------------------------------------------------ */
 
-	// Inputs Row
-	const inputsRow = document.createElement("div");
-	inputsRow.className = "inputs-row";
+	const detail = document.createElement("div");
+	detail.className = "rule-detail";
+
+	const fieldsRow = document.createElement("div");
+	fieldsRow.className = "rule-fields";
 
 	const listContainer = document.createElement("div");
-	listContainer.className = "input-domain-container"; // Add class for styling
+	listContainer.className = "input-domain-container";
 
-	// Domain input with custom dropdown
 	const domainInput = document.createElement("input");
 	domainInput.className = "domain-input";
 	domainInput.type = "text";
 	domainInput.placeholder = "Service or Google domain...";
 	domainInput.value = domain;
-	// Remove native autocomplete
 	domainInput.setAttribute("autocomplete", "off");
+	domainInput.setAttribute("aria-label", "Service or Google domain");
 	listContainer.appendChild(domainInput);
 
-	// Custom dropdown container
 	const dropdownList = document.createElement("div");
 	dropdownList.className = "dropdown-list";
 	listContainer.appendChild(dropdownList);
 
 	const domainErrorMessage = document.createElement("div");
 	domainErrorMessage.className = "error-message domain-error-message";
-	domainErrorMessage.textContent = "";
 	listContainer.appendChild(domainErrorMessage);
 
-	inputsRow.appendChild(listContainer);
-
 	const emailContainer = document.createElement("div");
-	emailContainer.className = "input-email-container"; // Add class for styling
-	// Email input
+	emailContainer.className = "input-email-container";
 
 	const emailInput = document.createElement("input");
 	emailInput.type = "text";
 	emailInput.placeholder = "Enter email...";
 	emailInput.value = email;
+	emailInput.setAttribute("aria-label", "Account email");
 	emailContainer.appendChild(emailInput);
 
 	const emailErrorMessage = document.createElement("div");
 	emailErrorMessage.className = "error-message email-error-message";
-	emailErrorMessage.textContent = "";
 	emailContainer.appendChild(emailErrorMessage);
 
-	inputsRow.appendChild(emailContainer);
+	fieldsRow.append(listContainer, emailContainer);
+	detail.appendChild(fieldsRow);
 
-	// Remove button with trash icon
-	const removeButton = document.createElement("div");
+	// Days
+	const daysOption = document.createElement("div");
+	daysOption.className = "rule-option";
+
+	const daysLabel = document.createElement("span");
+	daysLabel.className = "rule-option-label";
+	daysLabel.textContent = "Days";
+
+	const daysRow = document.createElement("div");
+	daysRow.className = "days-row";
+
+	const daysErrorMessage = document.createElement("div");
+	daysErrorMessage.className = "error-message days-error-message";
+
+	function validateDays() {
+		const hasSelectedDay = daysRow.querySelector(".day-btn.selected");
+		setErrorMessage(
+			daysErrorMessage,
+			hasSelectedDay ? "" : "Select at least one day"
+		);
+		return Boolean(hasSelectedDay);
+	}
+
+	DAY_LABELS.forEach((label, index) => {
+		const btn = document.createElement("button");
+		btn.className = "day-btn";
+		btn.textContent = label;
+		btn.dataset.day = index;
+		btn.title = DAY_NAMES[index];
+		btn.type = "button";
+		btn.setAttribute("aria-pressed", String(days.includes(index)));
+		if (days.includes(index)) {
+			btn.classList.add("selected");
+		}
+		btn.addEventListener("click", () => {
+			btn.classList.toggle("selected");
+			btn.setAttribute(
+				"aria-pressed",
+				String(btn.classList.contains("selected"))
+			);
+			validateDays();
+			updateSummary();
+			enableSaveButton();
+		});
+		daysRow.appendChild(btn);
+	});
+
+	daysOption.append(daysLabel, daysRow);
+	detail.append(daysOption, daysErrorMessage);
+
+	// Active hours
+	const timeOption = document.createElement("div");
+	timeOption.className = "rule-option";
+
+	const timeToggleLabel = document.createElement("label");
+	timeToggleLabel.className = "checkbox-label";
+
+	const timeToggle = document.createElement("input");
+	timeToggle.type = "checkbox";
+	timeToggle.className = "time-toggle";
+	timeToggle.checked = timeEnabled;
+
+	const timeToggleText = document.createElement("span");
+	timeToggleText.textContent = "Active hours";
+
+	timeToggleLabel.append(timeToggle, timeToggleText);
+
+	const timeFields = document.createElement("div");
+	timeFields.className = "time-fields";
+
+	const startTimeInput = document.createElement("input");
+	startTimeInput.type = "time";
+	startTimeInput.className = "time-input start-time-input";
+	startTimeInput.value = startTime;
+	startTimeInput.setAttribute("aria-label", "Start time");
+
+	const timeSeparator = document.createElement("span");
+	timeSeparator.className = "time-separator";
+	timeSeparator.textContent = "to";
+
+	const endTimeInput = document.createElement("input");
+	endTimeInput.type = "time";
+	endTimeInput.className = "time-input end-time-input";
+	endTimeInput.value = endTime;
+	endTimeInput.setAttribute("aria-label", "End time");
+
+	timeFields.append(startTimeInput, timeSeparator, endTimeInput);
+	timeOption.append(timeToggleLabel, timeFields);
+
+	const timeErrorMessage = document.createElement("div");
+	timeErrorMessage.className = "error-message time-error-message";
+
+	detail.append(timeOption, timeErrorMessage);
+
+	// Opting this rule out of the dates marked in the Overrides section.
+	// Rules that leave it unchecked keep running on a holiday.
+	const holidayOption = document.createElement("div");
+	holidayOption.className = "rule-option";
+
+	const holidayToggleLabel = document.createElement("label");
+	holidayToggleLabel.className = "checkbox-label";
+	holidayToggleLabel.title =
+		"Skip this rule on the dates marked as holidays above";
+
+	const holidayToggle = document.createElement("input");
+	holidayToggle.type = "checkbox";
+	holidayToggle.className = "holiday-toggle";
+	holidayToggle.checked = skipOnHolidays;
+	holidayToggle.addEventListener("change", enableSaveButton);
+
+	const holidayToggleText = document.createElement("span");
+	holidayToggleText.textContent = "Pause on holidays";
+
+	holidayToggleLabel.append(holidayToggle, holidayToggleText);
+	holidayOption.appendChild(holidayToggleLabel);
+	detail.appendChild(holidayOption);
+
+	// Delete sits inside the drawer, so a stray click on the list cannot
+	// destroy a rule the user was only scrolling past.
+	const ruleFooter = document.createElement("div");
+	ruleFooter.className = "rule-footer";
+
+	const removeButton = document.createElement("button");
+	removeButton.type = "button";
 	removeButton.className = "remove-button";
-	removeButton.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-	removeButton.title = "Remove";
+	removeButton.textContent = "Remove rule";
 	removeButton.addEventListener("click", async () => {
 		// The input holds a friendly key (e.g. "gmail") or a hostname;
 		// storage is keyed by the resolved domain (e.g. "mail.google.com").
@@ -504,135 +838,77 @@ function addDomainEmailPair(
 			await setStorage("domainEmails", domainEmails);
 		}
 		container.removeChild(domainEmailContainer);
+		updateRuleCount();
 		enableSaveButton();
 	});
-	inputsRow.appendChild(removeButton);
 
-	contentWrapper.appendChild(inputsRow);
+	ruleFooter.appendChild(removeButton);
+	detail.appendChild(ruleFooter);
 
-	// Days Row
-	const daysRow = document.createElement("div");
-	daysRow.className = "days-row";
-
-	const dayLabels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-	const fullDayNames = [
-		"Sunday",
-		"Monday",
-		"Tuesday",
-		"Wednesday",
-		"Thursday",
-		"Friday",
-		"Saturday",
-	];
-
-	const daysErrorMessage = document.createElement("div");
-	daysErrorMessage.className = "error-message days-error-message";
-
-	function validateDays() {
-		const hasSelectedDay = daysRow.querySelector(".day-btn.selected");
-		setErrorMessage(
-			daysErrorMessage,
-			hasSelectedDay ? "" : "Select at least one day"
-		);
-		return Boolean(hasSelectedDay);
-	}
-
-	dayLabels.forEach((label, index) => {
-		const btn = document.createElement("button");
-		btn.className = "day-btn";
-		btn.textContent = label;
-		btn.dataset.day = index;
-		btn.title = fullDayNames[index];
-		btn.type = "button"; // Prevent form submission behavior
-		if (days.includes(index)) {
-			btn.classList.add("selected");
-		}
-		btn.addEventListener("click", () => {
-			btn.classList.toggle("selected");
-			validateDays();
-			enableSaveButton();
-		});
-		daysRow.appendChild(btn);
-	});
-
-	contentWrapper.appendChild(daysRow);
-	contentWrapper.appendChild(daysErrorMessage);
-
-	const timeRow = document.createElement("div");
-	timeRow.className = "time-row";
-
-	const timeToggleLabel = document.createElement("label");
-	timeToggleLabel.className = "time-toggle-label";
-
-	const timeToggle = document.createElement("input");
-	timeToggle.type = "checkbox";
-	timeToggle.className = "time-toggle";
-	timeToggle.checked = timeEnabled;
-
-	const timeToggleText = document.createElement("span");
-	timeToggleText.textContent = "Active hours";
-
-	timeToggleLabel.appendChild(timeToggle);
-	timeToggleLabel.appendChild(timeToggleText);
-	timeRow.appendChild(timeToggleLabel);
-
-	const timeFields = document.createElement("div");
-	timeFields.className = "time-fields";
-
-	const startTimeInput = document.createElement("input");
-	startTimeInput.type = "time";
-	startTimeInput.className = "time-input start-time-input";
-	startTimeInput.value = startTime;
-
-	const timeSeparator = document.createElement("span");
-	timeSeparator.className = "time-separator";
-	timeSeparator.textContent = "to";
-
-	const endTimeInput = document.createElement("input");
-	endTimeInput.type = "time";
-	endTimeInput.className = "time-input end-time-input";
-	endTimeInput.value = endTime;
-
-	timeFields.appendChild(startTimeInput);
-	timeFields.appendChild(timeSeparator);
-	timeFields.appendChild(endTimeInput);
-	timeRow.appendChild(timeFields);
-	contentWrapper.appendChild(timeRow);
-
-	const timeErrorMessage = document.createElement("div");
-	timeErrorMessage.className = "error-message time-error-message";
-	timeRow.appendChild(timeErrorMessage);
-
-	// Opting this rule out of the dates marked in the header. Rules that leave
-	// it unchecked keep running on a holiday.
-	const holidayRow = document.createElement("div");
-	holidayRow.className = "holiday-row";
-
-	const holidayToggleLabel = document.createElement("label");
-	holidayToggleLabel.className = "time-toggle-label";
-	holidayToggleLabel.title =
-		"Skip this rule on the dates marked as holidays above";
-
-	const holidayToggle = document.createElement("input");
-	holidayToggle.type = "checkbox";
-	holidayToggle.className = "holiday-toggle";
-	holidayToggle.checked = skipOnHolidays;
-	holidayToggle.addEventListener("change", enableSaveButton);
-
-	const holidayToggleText = document.createElement("span");
-	holidayToggleText.textContent = "Pause on holidays";
-
-	holidayToggleLabel.appendChild(holidayToggle);
-	holidayToggleLabel.appendChild(holidayToggleText);
-	holidayRow.appendChild(holidayToggleLabel);
-	contentWrapper.appendChild(holidayRow);
-
-	domainEmailContainer.appendChild(contentWrapper);
-
-	// Add the row to the container
+	domainEmailContainer.appendChild(detail);
 	container.appendChild(domainEmailContainer);
 
-	// Function to check input fields and enable/disable the add button
+	/* ---------------------------------------------------------------------
+	 * Summary text, kept in step with the fields below it.
+	 * ------------------------------------------------------------------ */
+
+	function updateSummary() {
+		const domainValue = domainInput.value.trim();
+		const emailValue = emailInput.value.trim();
+
+		title.textContent = domainValue || "New rule";
+		avatar.textContent = (domainValue || "?").charAt(0);
+		avatar.style.background = avatarGradient(domainValue || "new");
+
+		metaEmail.textContent = emailValue || "No account set";
+
+		const selectedDays = Array.from(
+			daysRow.querySelectorAll(".day-btn.selected")
+		)
+			.map((btn) => parseInt(btn.dataset.day, 10))
+			.sort((a, b) => a - b);
+		metaWhen.textContent = describeDays(selectedDays);
+
+		const hasWindow =
+			timeToggle.checked && startTimeInput.value && endTimeInput.value;
+		metaHours.textContent = hasWindow
+			? `${startTimeInput.value}–${endTimeInput.value}`
+			: "";
+		metaHours.hidden = !hasWindow;
+		metaDotTwo.hidden = !hasWindow;
+
+		domainEmailContainer.classList.toggle("rule-off", !toggleInput.checked);
+	}
+
+	function setOpen(isOpen) {
+		domainEmailContainer.classList.toggle("open", isOpen);
+		summary.setAttribute("aria-expanded", String(isOpen));
+	}
+
+	// Clicking the row's own switch flips the rule; it must not also open the
+	// drawer underneath the pointer.
+	summary.addEventListener("click", (event) => {
+		if (event.target.closest(".switch")) return;
+		setOpen(!domainEmailContainer.classList.contains("open"));
+	});
+
+	summary.addEventListener("keydown", (event) => {
+		if (event.target.closest(".switch")) return;
+		if (event.key === "Enter" || event.key === " ") {
+			event.preventDefault();
+			setOpen(!domainEmailContainer.classList.contains("open"));
+		}
+	});
+
+	toggleInput.addEventListener("change", () => {
+		updateSummary();
+		enableSaveButton();
+	});
+
+	/* ---------------------------------------------------------------------
+	 * Validation and the domain dropdown, unchanged in behaviour.
+	 * ------------------------------------------------------------------ */
+
 	function checkInputs() {
 		const addButton = document.getElementById("addButton");
 		const domainValue = domainInput.value.trim();
@@ -647,10 +923,8 @@ function addDomainEmailPair(
 		}
 	}
 
-	// Listen for input events to update button state
 	domainInput.addEventListener("input", checkInputs);
 	emailInput.addEventListener("input", checkInputs);
-	// Call checkInputs initially to disable button if inputs are empty
 	checkInputs();
 
 	function validateTimeInputs() {
@@ -699,6 +973,7 @@ function addDomainEmailPair(
 		}
 
 		validateTimeInputs();
+		updateSummary();
 	}
 
 	timeToggle.addEventListener("change", () => {
@@ -710,14 +985,15 @@ function addDomainEmailPair(
 		input.addEventListener("input", () => {
 			enableSaveButton();
 			validateTimeInputs();
+			updateSummary();
 		});
 	});
 
 	syncTimeFieldState();
 
-	// Validation for email input
 	emailInput.addEventListener("input", () => {
 		enableSaveButton();
+		updateSummary();
 
 		const emailValue = emailInput.value.trim();
 
@@ -730,7 +1006,6 @@ function addDomainEmailPair(
 		}
 	});
 
-	// Populate dropdown with options
 	function updateDropdown(inputValue = "") {
 		dropdownList.innerHTML = "";
 		let hasMatches = false;
@@ -743,9 +1018,14 @@ function addDomainEmailPair(
 				hasMatches = true;
 				const item = document.createElement("div");
 				item.className = "dropdown-item";
-				item.innerHTML = `<strong>${
-					key.charAt(0).toUpperCase() + key.slice(1)
-				}</strong> <small>(${value})</small>`;
+
+				const name = document.createElement("strong");
+				name.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+
+				const host = document.createElement("small");
+				host.textContent = `(${value})`;
+
+				item.append(name, host);
 
 				item.addEventListener("mousedown", (e) => {
 					e.preventDefault(); // Prevent input blur
@@ -753,7 +1033,8 @@ function addDomainEmailPair(
 					dropdownList.classList.remove("show");
 					domainEmailContainer.classList.remove("active-editing");
 					checkInputs();
-					validateDomain(); // Trigger validation
+					updateSummary();
+					validateDomain();
 				});
 
 				dropdownList.appendChild(item);
@@ -762,7 +1043,8 @@ function addDomainEmailPair(
 
 		if (hasMatches) {
 			dropdownList.classList.add("show");
-			// Lift the parent container above others
+			// Lift the parent row so the list is not clipped by the rows
+			// stacked after it.
 			domainEmailContainer.classList.add("active-editing");
 		} else {
 			dropdownList.classList.remove("show");
@@ -770,7 +1052,6 @@ function addDomainEmailPair(
 		}
 	}
 
-	// Input event listeners
 	domainInput.addEventListener("focus", () => {
 		updateDropdown(domainInput.value.trim());
 	});
@@ -778,10 +1059,10 @@ function addDomainEmailPair(
 	domainInput.addEventListener("input", () => {
 		updateDropdown(domainInput.value.trim());
 		checkInputs();
+		updateSummary();
 		validateDomain();
 	});
 
-	// Close dropdown when clicking outside
 	document.addEventListener("click", (e) => {
 		if (!listContainer.contains(e.target)) {
 			dropdownList.classList.remove("show");
@@ -815,6 +1096,16 @@ function addDomainEmailPair(
 			setErrorMessage(domainErrorMessage, "Already added");
 		}
 		enableSaveButton();
+	}
+
+	updateSummary();
+	updateRuleCount();
+
+	// A blank row exists only to be filled in, so it opens itself. Rows
+	// loaded from storage stay collapsed.
+	if (!domain && !email) {
+		setOpen(true);
+		domainInput.focus();
 	}
 }
 

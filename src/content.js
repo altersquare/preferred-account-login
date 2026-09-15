@@ -5,6 +5,7 @@
 		const { isEnabled } = await getFromStorage("isEnabled"); // Get whether the extension is enabled.
 		let { domainEmails } = await getFromStorage("domainEmails"); // Get the domain-email pairs.
 		const { holidays } = await getFromStorage("holidays"); // Get the dates marked as holidays.
+		const { pausedUntil } = await getFromStorage("pausedUntil"); // Get the global temporary-pause deadline, if any.
 
 		// If on a Chrome internal page (e.g., extensions page), exit.
 		if (window.location.protocol === "chrome:") return;
@@ -12,6 +13,12 @@
 		// If the extension is explicitly disabled or not enabled yet (value undefined), then exit.
 		if (!isEnabled) {
 			console.log("Extension is disabled.");
+			return;
+		}
+
+		// If the user paused everything from the popup, exit until it expires.
+		if (getPauseRemainingMs(pausedUntil) > 0) {
+			console.log("Extension is paused.");
 			return;
 		}
 

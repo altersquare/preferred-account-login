@@ -17,7 +17,7 @@
  * ---------------------------------------------------------------------- */
 
 /* exported evaluateRule, buildRuleContext, ACTIVATION_CHECKS, pruneHolidays,
-   isValidTimeRange */
+   isValidTimeRange, getPauseRemainingMs */
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -135,6 +135,19 @@ function normalizeHolidays(value) {
 // sync storage. Returns a new array; the caller decides whether to persist it.
 function pruneHolidays(holidays, todayKey) {
 	return normalizeHolidays(holidays).filter((date) => date >= todayKey);
+}
+
+/* --- Temporary pause ---------------------------------------------------- */
+
+// A global "pause everything" timestamp (ms since epoch), independent of any
+// one rule. Checked directly by the content script rather than folded into
+// ACTIVATION_CHECKS below, the same way isEnabled is — neither has anything
+// to do with a specific rule. Returns the milliseconds remaining, 0 once it
+// has passed, so a caller only needs a truthiness check: the content script
+// deciding whether to run at all, or the popup rendering a countdown.
+function getPauseRemainingMs(pausedUntil, now = Date.now()) {
+	const remaining = Number(pausedUntil) - now;
+	return remaining > 0 ? remaining : 0;
 }
 
 /* --- Activation engine -------------------------------------------------- */

@@ -130,6 +130,59 @@ body {
 	color: var(--md-sys-color-on-surface-variant);
 }
 
+/* Pause Bar — a global "stop everything for a bit" control, independent of
+   Enable Extension above and of every rule's own toggle. Like that toggle,
+   choosing a duration writes to storage immediately instead of staging an
+   edit for Save Changes. */
+.pause-bar {
+	background-color: var(--md-sys-color-surface);
+	padding: 12px 24px;
+	box-shadow: 0 1px 0 var(--md-sys-color-outline-variant);
+}
+
+.pause-controls,
+.pause-active {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
+/* [hidden] is equal specificity to the rule above, and author styles win
+   ties over the browser's default UA stylesheet — so without this, "hidden"
+   would be silently ignored and both states would show at once. */
+.pause-controls[hidden],
+.pause-active[hidden] {
+	display: none;
+}
+
+.pause-label,
+.pause-status {
+	color: var(--md-sys-color-on-surface);
+	font-family: var(--md-sys-typescale-label-large-font);
+	font-size: var(--md-sys-typescale-label-large-size);
+	font-weight: var(--md-sys-typescale-label-large-weight);
+}
+
+.pause-status strong {
+	font-variant-numeric: tabular-nums;
+}
+
+.pause-buttons {
+	display: flex;
+	gap: 8px;
+}
+
+.pause-btn,
+.pause-active .textButton {
+	height: 36px;
+}
+
+.pause-btn {
+	border: 1px solid var(--md-sys-color-outline);
+}
+
 /* Domain List Container */
 /* Holiday Bar — the shared list of dates rules can opt out of. Edits here
    are written to storage immediately, so it sits outside the rule list and

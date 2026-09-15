@@ -52,6 +52,10 @@ FONT = 'system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
 PROBE_BG = (255, 0, 255)
 
 POPUP_W = 600
+# The real cap from popup.css (body { max-height: 600px }). Used verbatim by
+# the one "capped" shot below, rather than measured, since that shot's whole
+# point is a card that does NOT grow to fit its content.
+POPUP_H = 600
 ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
 WEEKDAYS = [1, 2, 3, 4, 5]
 
@@ -86,7 +90,8 @@ def rule(email, days=None, enabled=True, **extra):
                  "days": list(ALL_DAYS if days is None else days)}, **extra)
 
 
-def write_popup(slug, domain_emails, holidays=None, probe=False):
+def write_popup(slug, domain_emails, holidays=None, probe=False, capped=False,
+                 open_menu=False):
     """Write a standalone, runnable copy of the real popup with sample rules."""
     css = read("src", "popup.css")
     # rules.js declares the schema and checks (normalizeDomainSetting,
@@ -111,22 +116,64 @@ def write_popup(slug, domain_emails, holidays=None, probe=False):
         })
     )
 
-    # The popup normally caps itself at 600px and scrolls. For a still image we
-    # want the whole card, so let it grow to its natural height. During a probe
-    # render the page behind the popup is painted magenta so the content height
-    # can be read straight off the PNG.
-    overrides = (
-        "<style>html{background:%s}"
-        "body{max-height:none!important;overflow:visible!important;"
-        "height:max-content!important}</style>"
-        % ("#ff00ff" if probe else "transparent")
+    # popup.js populates the rule list asynchronously -- it awaits
+    # chrome.storage before appending a single row -- and attaches every
+    # button's click handler from inside that same async function. A
+    # DOMContentLoaded listener declared up in <head> can fire, or a
+    # synthetic click can land, before either has happened. Polling for the
+    # list to be non-empty (a cheap proxy for "handleDOMLoad has run past its
+    # synchronous setup, including attaching the overflow menu's handler")
+    # sidesteps that race for every post-load action below, instead of
+    # racing each one separately.
+    actions = []
+    if capped:
+        # Scrolled partway rather than left at the top, so the thumb floats
+        # clear of both ends and reads as "more above and below" rather than
+        # "start of a list".
+        actions.append("c.scrollTop=Math.round(c.scrollHeight*0.38);")
+    if open_menu:
+        # Clicks the real button rather than un-hiding the menu directly, so
+        # this exercises the same code path -- and the same aria-expanded
+        # bookkeeping -- a person opening it would.
+        actions.append(
+            "var mb=document.getElementById('moreButton');if(mb)mb.click();"
+        )
+    post_script = (
+        (
+            "<script>(function poll(){"
+            "var list=document.getElementById('domainEmailList');"
+            "var c=document.getElementById('content');"
+            "if(list&&list.children.length&&c){" + "".join(actions) +
+            "}else{setTimeout(poll,30);}"
+            "})();</script>"
+        )
+        if actions else ""
     )
+
+    if capped:
+        # The one shot that keeps the popup's real 600px cap and internal
+        # scrollbar, instead of growing to fit every rule, so the listing
+        # shows the scrollbar rather than only ever the shape of list that
+        # never needs one. Just background: popup.js's own CSS already caps
+        # and scrolls the real markup; nothing to override.
+        overrides = "<style>html{background:transparent}</style>"
+    else:
+        # The popup normally caps itself at 600px and scrolls. For a still
+        # image we want the whole card, so let it grow to its natural height.
+        # During a probe render the page behind the popup is painted magenta
+        # so the content height can be read straight off the PNG.
+        overrides = (
+            "<style>html{background:%s}"
+            "body{max-height:none!important;overflow:visible!important;"
+            "height:max-content!important}</style>"
+            % ("#ff00ff" if probe else "transparent")
+        )
 
     out = (
         '<!doctype html><html><head><meta charset="utf-8"><title>%s</title>'
         "<style>%s</style>%s</head><body>%s\n%s\n"
-        "<script>%s</script><script>%s</script></body></html>"
-        % (NAME, css, overrides, body, stub, rules_js, js)
+        "<script>%s</script><script>%s</script>%s</body></html>"
+        % (NAME, css, overrides, body, stub, rules_js, js, post_script)
     )
     filename = "popup-%s%s.html" % (slug, "-probe" if probe else "")
     io.open(os.path.join(SRC, filename), "w",
@@ -134,16 +181,18 @@ def write_popup(slug, domain_emails, holidays=None, probe=False):
     return filename
 
 
-def chrome_shot(chrome, src_file, out_png, width, height):
-    subprocess.run(
-        [chrome, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-         "--force-device-scale-factor=2", "--virtual-time-budget=6000",
-         "--allow-file-access-from-files", "--no-sandbox",
-         "--window-size=%d,%d" % (width, height),
-         "--screenshot=" + out_png,
-         os.path.join(SRC, src_file)],
-        check=True, capture_output=True,
-    )
+def chrome_shot(chrome, src_file, out_png, width, height, show_scrollbars=False):
+    # --hide-scrollbars is a browser-wide flag: it suppresses scrollbars in
+    # every frame, including the popup's own document nested in an iframe, so
+    # the one shot meant to show a real scrollbar has to run without it.
+    flags = [chrome, "--headless=new", "--disable-gpu",
+             "--force-device-scale-factor=2", "--virtual-time-budget=6000",
+             "--allow-file-access-from-files", "--no-sandbox",
+             "--window-size=%d,%d" % (width, height)]
+    if not show_scrollbars:
+        flags.append("--hide-scrollbars")
+    flags += ["--screenshot=" + out_png, os.path.join(SRC, src_file)]
+    subprocess.run(flags, check=True, capture_output=True)
 
 
 def measure_popup(chrome, slug, domain_emails, holidays=None):
@@ -168,7 +217,14 @@ def page(width, height, inner):
     return """<!doctype html><html><head><meta charset="utf-8"><style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:%(w)dpx;height:%(h)dpx;overflow:hidden}
-body{font-family:%(font)s;-webkit-font-smoothing:antialiased;color:%(ink)s;
+/* position:relative pins body itself as the containing block for every
+   position:absolute;inset:0 wrapper below. Without it, headless Chrome's
+   window-size and its actual viewport can disagree by a few dozen pixels, so
+   those wrappers center against the (larger) viewport instead of the body's
+   exact w x h -- invisible on a 1280px-wide screenshot, but a very visible
+   diagonal shift on the 440x280 promo tile. */
+body{position:relative;font-family:%(font)s;-webkit-font-smoothing:antialiased;
+ color:%(ink)s;
  background:
    radial-gradient(1100px 620px at 12%% -12%%,rgba(91,147,247,.28),transparent 62%%),
    radial-gradient(900px 560px at 104%% 112%%,rgba(26,95,208,.22),transparent 60%%),
@@ -219,12 +275,12 @@ def screenshot_page(headline, sub, popup_file, popup_h):
     })
 
 
-def render(chrome, html, out_png, width, height):
+def render(chrome, html, out_png, width, height, show_scrollbars=False):
     src_file = out_png.replace(".png", ".html")
     io.open(os.path.join(SRC, src_file), "w",
             encoding="utf-8", newline="").write(html)
     raw = os.path.join(SRC, "_raw-" + out_png)
-    chrome_shot(chrome, src_file, raw, width, height)
+    chrome_shot(chrome, src_file, raw, width, height, show_scrollbars)
 
     img = Image.open(raw)
     if img.size != (width, height):
@@ -239,8 +295,12 @@ def render(chrome, html, out_png, width, height):
           % (out_png, width, height, os.path.getsize(dest) / 1024.0))
 
 
-# Each entry is (slug, headline, sub, domain_emails, holidays). holidays
-# defaults to none for shots that do not need it.
+# Each entry is (slug, headline, sub, domain_emails, holidays, capped,
+# open_menu). holidays defaults to none for shots that do not need it.
+# capped keeps the popup at its real 600px height with its own scrollbar
+# instead of growing the card to fit every rule; open_menu clicks the
+# footer's "..." button open before the shot is taken, so the buttons behind
+# it are what the screenshot actually shows -- see write_popup.
 SHOTS = [
     ("01-overview",
      "One preferred account per service",
@@ -248,16 +308,24 @@ SHOTS = [
      {"mail.google.com": rule("you@gmail.com"),
       "drive.google.com": rule("you@company.com"),
       "youtube.com": rule("you@gmail.com")},
-     None),
+     None, False, False),
 
-    ("02-work-personal",
-     "Work on one, personal on another",
-     "Personal inbox, work drive, personal video. Every rule is independent.",
+    ("02-many-rules",
+     "Scales from one rule to a screenful",
+     "Every rule collapses to a single line, so a long list stays scannable "
+     "-- with a real scrollbar once it runs past the fold.",
      {"mail.google.com": rule("you@gmail.com"),
-      "drive.google.com": rule("you@company.com"),
-      "docs.google.com": rule("you@company.com"),
-      "youtube.com": rule("you@gmail.com")},
-     None),
+      "drive.google.com": rule("you@company.com", WEEKDAYS, timeEnabled=True,
+                               startTime="09:00", endTime="18:00"),
+      "docs.google.com": rule("you@company.com", WEEKDAYS),
+      "youtube.com": rule("you@gmail.com"),
+      "gemini.google.com": rule("you@company.com"),
+      "meet.google.com": rule("you@company.com", WEEKDAYS),
+      "photos.google.com": rule("you@gmail.com", [0, 6], enabled=False),
+      "keep.google.com": rule("you@gmail.com"),
+      "calendar.google.com": rule("you@company.com", WEEKDAYS),
+      "cloud.google.com": rule("you-ops@company.com", WEEKDAYS)},
+     None, True, False),
 
     ("03-schedule",
      "Rules that follow your week",
@@ -266,7 +334,7 @@ SHOTS = [
      {"drive.google.com": rule("you@company.com", WEEKDAYS, timeEnabled=True,
                                startTime="09:00", endTime="18:00"),
       "mail.google.com": rule("you@gmail.com")},
-     None),
+     None, False, False),
 
     ("04-holidays",
      "Stand down on your day off",
@@ -275,7 +343,7 @@ SHOTS = [
      {"mail.google.com": rule("you@gmail.com", skipOnHolidays=True),
       "drive.google.com": rule("you@company.com", skipOnHolidays=True),
       "youtube.com": rule("you@gmail.com")},
-     [TODAY_KEY]),
+     [TODAY_KEY], False, False),
 
     ("05-export-import",
      "Back up your rules, or move them",
@@ -285,7 +353,7 @@ SHOTS = [
       "gemini.google.com": rule("you@company.com"),
       "meet.google.com": rule("you@company.com"),
       "photos.google.com": rule("you@gmail.com")},
-     None),
+     None, False, True),
 ]
 
 
@@ -295,11 +363,21 @@ def main():
     print("Chrome: %s" % chrome)
     print("Writing listing assets to %s" % ASSETS)
 
-    for slug, headline, sub, rules, holidays in SHOTS:
-        popup_h = measure_popup(chrome, slug, rules, holidays)
-        popup_file = write_popup(slug, rules, holidays=holidays)
+    for slug, headline, sub, rules, holidays, capped, open_menu in SHOTS:
+        if capped:
+            # POPUP_H matches the real CSS cap, so nothing to measure -- the
+            # whole point of this shot is that the card does NOT grow to fit
+            # its content.
+            popup_h = POPUP_H
+        else:
+            # Measured with the menu closed. It opens upward from the footer
+            # into space the rules list above it already occupies, so it
+            # never grows the page past this measurement.
+            popup_h = measure_popup(chrome, slug, rules, holidays)
+        popup_file = write_popup(slug, rules, holidays=holidays, capped=capped,
+                                  open_menu=open_menu)
         render(chrome, screenshot_page(headline, sub, popup_file, popup_h),
-               "screenshot-%s.png" % slug, 1280, 800)
+               "screenshot-%s.png" % slug, 1280, 800, show_scrollbars=capped)
 
     render(chrome, page(440, 280, """
 <div style="position:absolute;inset:0;padding:28px;display:flex;flex-direction:column;

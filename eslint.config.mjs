@@ -31,6 +31,7 @@ export default [
 				isValidDateKey: "readonly",
 				normalizeHolidays: "readonly",
 				pruneHolidays: "readonly",
+				getPauseRemainingMs: "readonly",
 				ACTIVATION_CHECKS: "readonly",
 				buildRuleContext: "readonly",
 				evaluateRule: "readonly",

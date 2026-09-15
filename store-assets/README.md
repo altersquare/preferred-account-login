@@ -23,7 +23,7 @@ whenever the popup changes. Intermediate HTML is written to `_src/`
 | File                              | Size     | Slot               |
 | --------------------------------- | -------- | ------------------ |
 | `screenshot-01-overview.png`      | 1280×800 | Screenshot 1       |
-| `screenshot-02-work-personal.png` | 1280×800 | Screenshot 2       |
+| `screenshot-02-many-rules.png`    | 1280×800 | Screenshot 2       |
 | `screenshot-03-schedule.png`      | 1280×800 | Screenshot 3       |
 | `screenshot-04-holidays.png`      | 1280×800 | Screenshot 4       |
 | `screenshot-05-export-import.png` | 1280×800 | Screenshot 5       |

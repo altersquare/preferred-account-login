@@ -154,6 +154,20 @@
 		</header>
 
 		<main class="content" id="content">
+			<section class="section" id="importPanel" hidden>
+				<h2 class="section-caption">Import rules</h2>
+				<div class="group">
+					<div class="line line-stack" id="importFileContainer">
+						<label for="importFile"
+							>Choose your exported rules JSON file.</label
+						>
+						<small
+							>Review the loaded rules below, then click Save
+							Changes to replace your saved rules.</small
+						>
+					</div>
+				</div>
+			</section>
 			<!-- Temporary overrides: both controls here take effect without
 			     waiting on Save Changes, which is why they sit apart from the
 			     rule list. -->
@@ -311,6 +325,7 @@
 			/>
 		</footer>
 
+		<script src="browser-api.js"></script>
 		<script src="rules.js"></script>
 		<script src="popup.js"></script>
 	</body>

@@ -132,7 +132,7 @@ function formatDateKey(dateKey) {
 // "storage".
 async function reloadActiveTab() {
 	try {
-		await chrome.tabs.reload();
+		await extensionApi.tabs.reload();
 	} catch (error) {
 		console.warn("Could not reload active tab:", error);
 	}
@@ -442,8 +442,15 @@ async function handleDOMLoad() {
 		.addEventListener("click", handleExportClick);
 	document
 		.getElementById("importButton")
-		.addEventListener("click", () => importFile.click());
+		.addEventListener("click", handleImportClick);
 	importFile.addEventListener("change", handleImportFile);
+	if (isImportPage()) {
+		document.title = "Import rules — Preferred Account Login";
+		document.body.classList.add("import-page");
+		document.getElementById("importPanel").hidden = false;
+		document.getElementById("importFileContainer").appendChild(importFile);
+		importFile.hidden = false;
+	}
 
 	await setupPause();
 	await setupHolidays();
@@ -1434,6 +1441,30 @@ function normalizeImportedRules(ruleMap) {
 	return { rules, skipped };
 }
 
+function isImportPage() {
+	return new URLSearchParams(window.location.search).get("import") === "1";
+}
+
+async function handleImportClick() {
+	// Firefox can destroy a toolbar popup when the native file picker takes
+	// focus (Mozilla bug 1292701). Keep the document alive in a tab instead.
+	if (extensionApi.runtime.getBrowserInfo && !isImportPage()) {
+		try {
+			await extensionApi.tabs.create({
+				url: extensionApi.runtime.getURL("src/popup.html?import=1"),
+			});
+		} catch {
+			setTransferStatus(
+				"Could not open the import tab. Please try again.",
+				true
+			);
+		}
+		return;
+	}
+	// Keep this in the click handler so the picker has user activation.
+	document.getElementById("importFile").click();
+}
+
 async function handleImportFile(event) {
 	setTransferStatus();
 
@@ -1495,12 +1526,12 @@ function validateAndMutateKey(key) {
 
 async function getFromStorage(key) {
 	let storageKey = validateAndMutateKey(key);
-	return await chrome.storage.sync.get([storageKey]);
+	return await extensionApi.storage.sync.get([storageKey]);
 }
 
 async function setStorage(key, value) {
 	let storageKey = validateAndMutateKey(key);
-	return await chrome.storage.sync.set({ [storageKey]: value });
+	return await extensionApi.storage.sync.set({ [storageKey]: value });
 }
 
 function enableSaveButton() {

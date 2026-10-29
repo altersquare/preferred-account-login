@@ -3,6 +3,11 @@ import pluginJs from "@eslint/js";
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
+	{ ignores: [".preview/**"] },
+	{
+		files: ["tests/*.cjs"],
+		languageOptions: { globals: globals.node },
+	},
 	{ files: ["**/*.js"], languageOptions: { sourceType: "commonjs" } },
 	{
 		// Extension code is loaded as classic scripts, not modules: the names
@@ -12,7 +17,7 @@ export default [
 	},
 	{
 		languageOptions: {
-			globals: { ...globals.browser, chrome: "readonly" },
+			globals: { ...globals.browser, chrome: "readonly", browser: "readonly" },
 		},
 	},
 	{
@@ -21,6 +26,7 @@ export default [
 		files: ["src/content.js", "src/popup.js"],
 		languageOptions: {
 			globals: {
+				extensionApi: "readonly",
 				ALL_DAYS: "readonly",
 				normalizeDays: "readonly",
 				normalizeDomainSetting: "readonly",

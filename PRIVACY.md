@@ -1,15 +1,17 @@
 # Privacy Policy
 
-**Preferred Account Login** (the "extension") — Chrome browser extension.
+**Preferred Account Login** (the "extension") — Chrome and desktop Firefox browser extension.
 
-**Last updated:** 1 September 2026
+**Last updated:** 29 October 2026
 
 ## Summary
 
-The extension does not collect, transmit, sell, or share any of your data. It
-contains no analytics, no tracking, no advertising, and no third-party code. It
-makes no network requests of any kind. Everything you configure stays in your
-own browser.
+The developer does not collect, sell, or receive your data. The extension
+contains no analytics, tracking, advertising, or third-party code. It selects
+your account by adding your configured email address to the matching Google
+service's URL as the `authuser` parameter. Your browser sends that URL to Google
+when loading the page. Settings are stored in your browser and may be synced by
+the browser if you enable its sync feature.
 
 The rest of this document explains exactly what is stored and why.
 
@@ -26,16 +28,19 @@ The extension stores only what you type into its popup:
 | Active hours       | Optional start and end time for a rule            |
 | Holiday dates      | Dates you mark off, on which opted-in rules pause |
 
-These are held under three keys, `domainEmails`, `isEnabled`, and `holidays`,
-in Chrome's extension storage (`chrome.storage.sync`).
+Rules, the on/off setting, holiday dates, and the temporary pause deadline are
+held under `domainEmails`, `isEnabled`, `holidays`, and `pausedUntil` in browser
+extension storage (`storage.sync`). The theme is saved in the popup's
+`localStorage` and does not sync.
 
 Email addresses are personal data, which is why this policy exists. They are
 used for one purpose only: to build the account parameter added to a URL when
-you open a matching service. They are never sent anywhere.
+you open a matching service. Google receives the address in that URL; the
+developer never receives it.
 
 ## Where that data lives
 
-Your rules are stored by Chrome itself, in the extension storage area belonging
+Your rules are stored by the browser itself, in the extension storage area belonging
 to your browser profile.
 
 If you have **Chrome Sync** enabled, Chrome synchronises that storage across the
@@ -46,6 +51,11 @@ Google Account and is governed by
 The developer of this extension has no access to it and receives nothing from
 it. If you would rather your rules stayed on one device, turn off Chrome Sync,
 or disable syncing for extensions, in Chrome's settings.
+
+On desktop Firefox, extension storage can sync through your Mozilla account
+when Add-ons sync is enabled, under [Mozilla's Privacy Notice](https://www.mozilla.org/privacy/firefox/).
+Chrome and Firefox do not sync these rules with each other. For local temporary
+Firefox installations, export your rules as a backup before restarting.
 
 ## What the extension does on web pages
 
@@ -70,13 +80,13 @@ it does nothing at all on sites outside the three domains listed above.
 - It never sees, handles, requests, or stores passwords.
 - It never signs you in or out. It only selects between accounts you are
   already signed into.
-- It makes no requests to any server, including any server operated by the
-  developer. There is no backend.
+- It makes no background requests to a developer-operated server. There is no
+  backend. Account selection navigates to a Google service URL as described above.
 - It contains no analytics, telemetry, crash reporting, advertising, or
   fingerprinting.
 - It loads no remote code and bundles no third-party libraries.
-- It does not sell or transfer your data to anyone, for any purpose. There is
-  no data to sell, because none is collected.
+- It does not sell your data or send it to the developer. Google receives the
+  account-selection URL, and browser sync is controlled by your browser settings.
 
 ## Export and import
 
@@ -104,7 +114,7 @@ against your rules. It requests no access to any other site.
 Your rules stay until you remove them. You can:
 
 - delete an individual rule with the delete button next to it, then save;
-- remove everything by uninstalling the extension, which causes Chrome to
+- remove everything by uninstalling the extension, which causes the browser to
   discard its stored data.
 
 If Chrome Sync was enabled, removal propagates through Chrome's own sync in the

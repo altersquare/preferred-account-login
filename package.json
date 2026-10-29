@@ -1,19 +1,20 @@
 {
-  "name": "preferred-account-login",
-  "version": "7.7.0",
-  "description": "This Chrome extension simplifies switching between multiple Google accounts by automatically adding the `authuser` parameter to relevant Google domains.",
-  "main": "content.js",
-  "scripts": {
-    "lint": "eslint .",
-    "format": "prettier --write ."
-  },
-  "keywords": [],
-  "author": "",
-  "license": "MIT",
-  "devDependencies": {
-    "@eslint/js": "^9.21.0",
-    "eslint": "^9.21.0",
-    "globals": "^16.0.0",
-    "prettier": "^3.5.2"
-  }
+	"name": "preferred-account-login",
+	"version": "7.7.0",
+	"description": "A Chrome and Firefox extension that opens Google services with your preferred account.",
+	"main": "content.js",
+	"scripts": {
+		"test": "node --test tests/*.test.cjs",
+		"lint": "eslint .",
+		"format": "prettier --write ."
+	},
+	"keywords": [],
+	"author": "",
+	"license": "MIT",
+	"devDependencies": {
+		"@eslint/js": "^9.21.0",
+		"eslint": "^9.21.0",
+		"globals": "^16.0.0",
+		"prettier": "^3.5.2"
+	}
 }

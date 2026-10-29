@@ -2,7 +2,7 @@
 
 <img src="icons/icon128.png" alt="Preferred Account Login icon" width="96" height="96">
 
-A Chrome extension that automatically adds the `authuser` parameter to Google domains, allowing you to set your preferred Google account for each service.
+A Chrome and desktop Firefox extension that automatically adds the `authuser` parameter to Google domains, allowing you to set your preferred Google account for each service.
 
 ## Overview
 
@@ -51,6 +51,24 @@ If you use multiple Google accounts (personal, work, school), you know the frust
 3. Enable "Developer mode" in the top-right corner
 4. Click "Load unpacked" and select the directory containing the extension files
 
+### Local Firefox installation (Firefox 140 or later)
+
+1. Open `about:debugging#/runtime/this-firefox` in Firefox.
+2. Click **Load Temporary Add-on…**.
+3. Select this repository's `manifest.json`.
+4. Open **Preferred Account Login** from Firefox's Extensions menu and configure
+   your rules, or import a JSON export from your Chrome installation.
+
+This uses the same source files as Chrome; no build, signing, or public listing
+is needed. Firefox removes temporary add-ons when it closes, so repeat the load
+step after restarting Firefox. Export your rules before restarting to keep a
+backup; temporary installation is intended for development and testing.
+After editing the source, click **Reload** next to the add-on in `about:debugging`.
+
+The stable Firefox add-on ID enables extension sync storage. Chrome and Firefox
+have separate storage and sync systems; use Export/Import to move rules between
+them. This local setup targets desktop Firefox.
+
 ## Usage
 
 1. Click the extension icon in your browser toolbar
@@ -86,6 +104,9 @@ If you use multiple Google accounts (personal, work, school), you know the frust
 - Click "Import" and pick a previously exported file to load those rules. The
   imported rules replace what is in the list, but nothing is written until you
   click "Save Changes" — closing the popup discards the import.
+- In Firefox, Import opens an editor tab. Choose your JSON file there, review
+  the rules, and click "Save Changes". Keeping import in a tab prevents Firefox's
+  file picker from closing the extension popup before the file can be read.
 - Rows that name an unsupported domain or an invalid email address are skipped,
   and the popup reports how many were loaded and how many were skipped.
 - Exported files carry the holiday dates and each rule's `Pause on holidays`
@@ -149,7 +170,7 @@ The extension:
 ## Technical Details
 
 - Built with vanilla JavaScript, HTML, and CSS
-- Uses Chrome's Storage API for persistent settings
+- Uses the browser's extension Storage API for persistent settings
 - Content script runs at document start to ensure timely redirects
 - `src/rules.js` holds the rule schema and the ordered activation checks that
   decide whether a rule applies; the popup and the content script both load it,
@@ -168,10 +189,10 @@ Full policy: [PRIVACY.md](PRIVACY.md)
 In short, this extension:
 
 - Does NOT collect any user data
-- Does NOT send any information to external servers
-- Stores your rules in Chrome's extension storage (`chrome.storage.sync`),
-  which Chrome syncs across your own signed-in profiles when Chrome Sync is
-  enabled. Nothing is sent to the developer.
+- Sends your chosen email address to the matching Google service as the
+  `authuser` URL parameter, so Google can select that account
+- Stores your rules in extension storage (`storage.sync`), which your browser
+  can sync when enabled. Nothing is sent to the developer.
 - Requires a single API permission (`storage`), plus host access to the
   domains the content script runs on
 
@@ -195,6 +216,7 @@ Contributions are welcome! To contribute:
 ├── scripts            # Build scripts for the Web Store upload zip
 ├── src                # Source code
 │   ├── content.js     # Content script for adding authuser parameter
+│   ├── browser-api.js # Shared Firefox/Chrome API selection
 │   ├── popup.css      # Extension popup styles
 │   ├── popup.html     # Extension popup interface
 │   ├── popup.js       # Popup functionality
@@ -205,7 +227,7 @@ Contributions are welcome! To contribute:
 ├── .prettierrc.js     # Prettier configuration
 ├── CHANGELOG.md       # Release history
 ├── eslint.config.mjs  # ESLint configuration
-├── manifest.json      # Chrome extension manifest
+├── manifest.json      # Shared Chrome and desktop Firefox manifest
 ├── package.json       # NPM package configuration
 └── README.md          # This file
 ```

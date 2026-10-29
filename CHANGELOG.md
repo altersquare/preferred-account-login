@@ -4,6 +4,22 @@ Notable changes to Preferred Account Login. The format is based on
 [Keep a Changelog](https://keepachangelog.com/), and versions follow the
 `version` field in `manifest.json`.
 
+## [Unreleased]
+
+### Fixed
+
+- Firefox rule imports now use an editor tab so opening the file picker cannot
+  dismiss the popup and discard the selected file.
+
+### Added
+
+- Local desktop Firefox support: shared promise-based browser API selection,
+  a stable Firefox add-on ID for storage, and temporary installation instructions.
+
+### Changed
+
+- Clarified browser storage and the account email sent to Google in the privacy policy.
+
 ## [7.7.0] — 2026-09-15
 
 ### Added

@@ -1,7 +1,7 @@
 // Immediately invoked function expression (IIFE) to execute code on page load.
 (async () => {
 	try {
-		// Retrieve stored settings from Chrome storage.
+		// Retrieve stored settings from extension storage.
 		const { isEnabled } = await getFromStorage("isEnabled"); // Get whether the extension is enabled.
 		let { domainEmails } = await getFromStorage("domainEmails"); // Get the domain-email pairs.
 		const { holidays } = await getFromStorage("holidays"); // Get the dates marked as holidays.
@@ -141,22 +141,22 @@ function validateAndMutateKey(key) {
 }
 
 /**
- * Retrieves data from Chrome local storage.
+ * Retrieves data from extension sync storage.
  * @param {string} key The key to retrieve.
  * @returns {Promise<any>} A promise that resolves with the retrieved data.
  */
 async function getFromStorage(key) {
 	let storageKey = validateAndMutateKey(key); // Validate the key.
-	return await chrome.storage.sync.get([storageKey]);
+	return await extensionApi.storage.sync.get([storageKey]);
 }
 
 /**
- * Sets data in Chrome local storage.
+ * Sets data in extension sync storage.
  * @param {string} key The key to set.
  * @param {any} value The value to set.
  * @returns {Promise<void>} A promise that resolves when the data is set.
  */
 async function setStorage(key, value) {
 	let storageKey = validateAndMutateKey(key); // Validate the key.
-	return await chrome.storage.sync.set({ [storageKey]: value });
+	return await extensionApi.storage.sync.set({ [storageKey]: value });
 }

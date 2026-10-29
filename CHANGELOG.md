@@ -8,6 +8,8 @@ Notable changes to Preferred Account Login. The format is based on
 
 ### Fixed
 
+- Added Mozilla's required data disclosure for the configured account email
+  sent to Google through the `authuser` URL, enabling unlisted signing submissions.
 - Firefox rule imports now use an editor tab so opening the file picker cannot
   dismiss the popup and discard the selected file.
 

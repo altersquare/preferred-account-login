@@ -144,6 +144,9 @@ test("Shared manifest has a stable Firefox storage ID and loads the API adapter 
 	const settings = manifest.browser_specific_settings;
 	assert.equal(settings.gecko.id, "preferred-account-login@altersquare.io");
 	assert.equal(settings.gecko.strict_min_version, "140.0");
+	assert.deepEqual(settings.gecko.data_collection_permissions.required, [
+		"personallyIdentifyingInfo",
+	]);
 	for (const entry of manifest.content_scripts) {
 		assert.equal(entry.js[0], "src/browser-api.js");
 		for (const file of entry.js)
